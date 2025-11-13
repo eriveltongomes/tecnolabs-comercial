@@ -1,0 +1,1 @@
+<img src="{{ asset('images/logo1.png') }}" {{ $attributes }} alt="Logo Tecnolabs" style="max-height: auto; width: auto;">

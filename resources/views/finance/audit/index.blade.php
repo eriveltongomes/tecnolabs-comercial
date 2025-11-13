@@ -1,0 +1,66 @@
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('Auditoria e Logs do Sistema') }}
+        </h2>
+    </x-slot>
+
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6 text-gray-900">
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase">Data</th>
+                                    <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase">Usuário</th>
+                                    <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ação</th>
+                                    <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase">Alvo</th>
+                                    <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase">Detalhes</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @forelse ($activities as $log)
+                                <tr class="{{ str_contains($log->description, 'ESTORNO') ? 'bg-red-50' : '' }}">
+                                    <td class="px-6 py-4 text-gray-500">{{ $log->created_at->format('d/m/Y H:i') }}</td>
+                                    <td class="px-6 py-4 font-bold text-gray-700">{{ $log->causer->name ?? 'Sistema' }}</td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2 py-1 rounded text-xs font-bold 
+                                            {{ $log->description == 'created' ? 'bg-green-100 text-green-800' : '' }}
+                                            {{ $log->description == 'updated' ? 'bg-blue-100 text-blue-800' : '' }}
+                                            {{ str_contains($log->description, 'ESTORNO') ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800' }}">
+                                            {{ $log->description }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-gray-500">
+                                        {{ class_basename($log->subject_type) }} #{{ $log->subject_id }}
+                                    </td>
+                                    <td class="px-6 py-4 text-xs text-gray-500 font-mono">
+                                        @if($log->properties->has('motivo'))
+                                            <div class="text-red-600 mb-1">Motivo: {{ $log->properties['motivo'] }}</div>
+                                        @endif
+                                        
+                                        @if($log->properties->has('attributes'))
+                                            @foreach($log->properties['attributes'] as $key => $val)
+                                                @if($key != 'updated_at')
+                                                    <div title="{{ $val }}"><strong>{{ $key }}:</strong> {{ is_array($val) ? json_encode($val) : $val }}</div>
+                                                @endif
+                                            @endforeach
+                                        @endif
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr><td colspan="5" class="px-6 py-4 text-center">Nenhum registro.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                        <div class="mt-4">{{ $activities->links() }}</div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>

@@ -11,14 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('proposals', function (Blueprint $table) {
-            // Adiciona campos para o documento PDF
-            $table->string('service_location')->nullable()->after('total_value');
-            $table->date('service_date')->nullable()->after('service_location');
-            $table->text('payment_terms')->nullable()->after('service_date');
-            $table->string('courtesy')->nullable()->after('payment_terms');
-            $table->text('scope_description')->nullable()->after('courtesy'); // O Escopo livre
-        });
+        // Schema::table('proposals', function (Blueprint $table) {
+        //     $table->string('service_location')->nullable()->after('total_value');
+        //     ... (tudo comentado)
+        // });
     }
 
     /**

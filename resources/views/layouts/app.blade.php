@@ -36,7 +36,7 @@
                     <strong>Tecnolabs Sistema Comercial</strong> &copy; {{ date('Y') }}
                 </p>
                 <p>
-                    Versão <strong>1.0.0</strong> <span class="mx-1">•</span>
+                    Versão <strong>1.0.1</strong> <span class="mx-1">•</span>
                     Desenvolvido por <strong>Tecnolabs - Agência Digital</strong>
                 </p>
             </footer>

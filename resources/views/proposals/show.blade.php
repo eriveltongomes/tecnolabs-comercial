@@ -4,20 +4,15 @@
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
                 {{ __('Detalhes da Proposta #') . $proposal->proposal_number }}
             </h2>
-            <div class="flex space-x-2">
-                <a href="{{ route('proposals.pdf', $proposal->id) }}" target="_blank" class="px-4 py-2 bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-gray-700 uppercase hover:bg-gray-300">
-                    Gerar PDF
-                </a>
+            <div class="flex space-x-2"> <a href="{{ route('proposals.pdf', $proposal->id) }}" target="_blank" class="px-4 py-2 bg-gray-200 border border-transparent rounded-md font-semibold text-xs text-gray-700 uppercase hover:bg-gray-300 flex items-center"> <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> PDF </a>
                 
-                @if(!in_array($proposal->status, ['aprovada', 'cancelada', 'em_analise']))
-                    <a href="{{ route('proposals.edit', $proposal->id) }}" class="px-4 py-2 bg-yellow-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase hover:bg-yellow-600">
+                @if(!in_array($proposal->status, ['aprovada', 'cancelada', 'em_analise', 'recusada']))
+                    <a href="{{ route('proposals.edit', $proposal->id) }}" class="px-4 py-2 bg-yellow-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase hover:bg-yellow-600 flex items-center">
                         Editar
                     </a>
                 @endif
 
-                <a href="{{ route('proposals.index') }}" class="px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase hover:bg-gray-700">
-                    Voltar
-                </a>
+                <a href="{{ route('proposals.index') }}" class="px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase hover:bg-gray-700">Voltar</a>
             </div>
         </div>
     </x-slot>
@@ -30,7 +25,8 @@
                 {{ $proposal->status === 'reprovada' ? 'bg-red-100 text-red-800' : '' }}
                 {{ in_array($proposal->status, ['rascunho', 'aberta']) ? 'bg-blue-50 text-blue-800' : '' }}
                 {{ $proposal->status === 'em_analise' ? 'bg-yellow-100 text-yellow-800' : '' }}
-                {{ $proposal->status === 'cancelada' ? 'bg-gray-200 text-gray-600' : '' }}">
+                {{ $proposal->status === 'cancelada' ? 'bg-gray-200 text-gray-600' : '' }}
+                {{ $proposal->status === 'recusada' ? 'bg-red-200 text-red-900' : '' }}">
                 
                 <div>
                     <span class="font-bold text-lg">Status Atual: {{ ucfirst(str_replace('_', ' ', $proposal->status)) }}</span>
@@ -38,115 +34,172 @@
                         <div class="mt-1 text-sm font-bold text-red-700">Motivo: {{ $proposal->rejection_reason }}</div>
                     @endif
                     @if($proposal->status === 'aprovada')
-                        <div class="mt-1 text-sm">Aprovado em: {{ $proposal->approved_at->format('d/m/Y H:i') }}</div>
+                        <div class="mt-1 text-sm">Aprovado em: {{ $proposal->approved_at ? $proposal->approved_at->format('d/m/Y H:i') : '-' }}</div>
+                    @endif
+                    @if($proposal->status === 'cancelada' && $proposal->rejection_reason)
+                        <div class="mt-1 text-sm font-bold text-red-700">{{ $proposal->rejection_reason }}</div>
                     @endif
                 </div>
 
                 <div class="flex space-x-2">
-                    
                     @if(in_array($proposal->status, ['rascunho', 'aberta', 'reprovada']))
                         <form action="{{ route('proposals.sendToAnalysis', $proposal->id) }}" method="POST" onsubmit="return confirm('O cliente aprovou? Enviar para análise do Financeiro?');">
                             @csrf @method('PATCH')
-                            <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow">
-                                Cliente Aprovou (Enviar p/ Financeiro)
-                            </button>
+                            <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow">Cliente Aceitou</button>
+                        </form>
+                        <form action="{{ route('proposals.refuse', $proposal->id) }}" method="POST" onsubmit="return confirm('O Cliente recusou a proposta? Isso fechará a negociação.');">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-bold shadow">Recusou</button>
                         </form>
                     @endif
 
-                    @if(in_array($proposal->status, ['em_analise']) && in_array(Auth::user()->role, ['admin', 'financeiro']))
-                        <button onclick="document.getElementById('rejectModal').style.display='block'" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold shadow">
-                            Reprovar
-                        </button>
-
+                    @if($proposal->status === 'em_analise' && in_array(Auth::user()->role, ['admin', 'financeiro']))
+                        <button onclick="document.getElementById('rejectModal').style.display='block'" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold shadow">Reprovar</button>
                         <form action="{{ route('proposals.approve', $proposal->id) }}" method="POST" onsubmit="return confirm('Confirmar aprovação final? Isso gera a comissão.');">
                             @csrf @method('PATCH')
-                            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow">
-                                Aprovar Proposta
-                            </button>
+                            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow">Aprovar</button>
                         </form>
                     @endif
 
+                    @if($proposal->status === 'aprovada' && in_array(Auth::user()->role, ['admin', 'financeiro']))
+                        <button onclick="document.getElementById('reverseModal').style.display='block'" class="px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900 font-bold shadow border border-red-900 ml-4">⚠️ Estornar</button>
+                    @endif
                 </div>
             </div>
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 border-b pb-6">
                         <div>
-                            <h3 class="text-lg font-bold mb-2 text-gray-700">Dados do Cliente</h3>
-                            <p><span class="text-gray-500">Cliente:</span> <strong class="text-lg">{{ $proposal->client->name }}</strong></p>
-                            <p><span class="text-gray-500">Email:</span> {{ $proposal->client->email ?? '-' }}</p>
-                            <p><span class="text-gray-500">Contato:</span> {{ $proposal->client->contact_name ?? '-' }}</p>
-                            <p><span class="text-gray-500">CNPJ/CPF:</span> {{ $proposal->client->document ?? '-' }}</p>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">Cliente</h3>
+                            <p class="text-lg font-bold">{{ $proposal->client->name }}</p>
+                            <p class="text-sm text-gray-600">{{ $proposal->client->document ?? 'CNPJ/CPF não inf.' }}</p>
+                            <p class="text-sm text-gray-600">{{ $proposal->client->email }}</p>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold mb-2 text-gray-700">Dados da Venda</h3>
-                            <p><span class="text-gray-500">Vendedor:</span> {{ $proposal->user->name }}</p>
-                            <p><span class="text-gray-500">Canal:</span> {{ $proposal->channel->name }}</p>
-                            <p><span class="text-gray-500">Serviço:</span> <span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-bold uppercase">{{ $proposal->service_type }}</span></p>
-                            <p><span class="text-gray-500">Data Criação:</span> {{ $proposal->created_at->format('d/m/Y') }}</p>
+                            <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">Venda</h3>
+                            <p class="text-sm text-gray-600"><span class="font-bold">Vendedor:</span> {{ $proposal->user->name }}</p>
+                            <p class="text-sm text-gray-600"><span class="font-bold">Canal:</span> {{ $proposal->channel->name }}</p>
+                            <div class="mt-1"><span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-bold uppercase border border-indigo-200">{{ ucfirst($proposal->service_type) }}</span></div>
+                        </div>
+                        <div class="text-right">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase mb-1">Total</h3>
+                            <p class="text-3xl font-bold text-indigo-600">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</p>
                         </div>
                     </div>
 
-                    <hr class="my-6">
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-l-4 border-indigo-500 pl-3">Escopo e Execução</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                            <div class="bg-gray-50 p-4 rounded-lg">
+                                <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">Descrição do Serviço</h4>
+                                <p class="text-sm text-gray-700 whitespace-pre-line">{{ $proposal->scope_description }}</p>
+                            </div>
+                            <div class="space-y-4">
+                                <div class="bg-gray-50 p-4 rounded-lg"><h4 class="text-xs font-bold text-gray-500 uppercase mb-1">Local</h4><p class="text-sm font-bold">{{ $proposal->service_location }}</p></div>
+                                <div class="bg-gray-50 p-4 rounded-lg"><h4 class="text-xs font-bold text-gray-500 uppercase mb-1">Data</h4><p class="text-sm font-bold">{{ \Carbon\Carbon::parse($proposal->service_date)->format('d/m/Y') }}</p></div>
+                                <div class="bg-gray-50 p-4 rounded-lg"><h4 class="text-xs font-bold text-gray-500 uppercase mb-1">Pagamento</h4><p class="text-sm font-bold">{{ $proposal->payment_terms }}</p></div>
+                            </div>
+                        </div>
+                    </div>
 
-                    <h3 class="text-lg font-bold mb-4 text-gray-700">Detalhamento Financeiro</h3>
-                    <div class="overflow-x-auto border rounded-lg">
-                        <table class="min-w-full">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                @if($proposal->service_type == 'drone' || $proposal->service_type == 'tour_virtual')
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-l-4 border-green-500 pl-3">Detalhamento Financeiro</h3>
+                        @php $labels = ['fuel' => 'Combustível', 'hotel' => 'Hospedagem', 'food' => 'Alimentação', 'other' => 'Outros']; @endphp
+                        <div class="overflow-x-auto border rounded-lg">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
                                     <tr>
-                                        <td class="px-6 py-4">Mão de Obra</td>
-                                        <td class="px-6 py-4 text-right">R$ {{ number_format($proposal->service_details['labor_cost'] ?? 0, 2, ',', '.') }}</td>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Detalhes</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Custo (Interno)</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor Cobrado</th>
                                     </tr>
-                                @elseif($proposal->service_type == 'timelapse')
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    @if($proposal->service_type != 'timelapse')
                                     <tr>
-                                        <td class="px-6 py-4">Mensalidade ({{ $proposal->service_details['months'] ?? 1 }} meses)</td>
-                                        <td class="px-6 py-4 text-right">
-                                            <div class="text-xs text-gray-500">R$ {{ number_format($proposal->service_details['monthly_cost'] ?? 0, 2, ',', '.') }} / mês</div>
-                                            R$ {{ number_format(($proposal->service_details['monthly_cost'] ?? 0) * ($proposal->service_details['months'] ?? 1), 2, ',', '.') }}
-                                        </td>
-                                    </tr>
-                                    @if(!empty($proposal->service_details['installation_cost']))
-                                    <tr>
-                                        <td class="px-6 py-4">Taxa de Instalação</td>
-                                        <td class="px-6 py-4 text-right">R$ {{ number_format($proposal->service_details['installation_cost'], 2, ',', '.') }}</td>
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-500">Custos Fixos (Rateio)</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $proposal->service_details['period_hours'] ?? 0 }}h</td>
+                                        <td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($costFixedProporcional, 2, ',', '.') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-300 text-right">--</td>
                                     </tr>
                                     @endif
-                                @endif
 
-                                @foreach($proposal->variableCosts as $cost)
-                                <tr>
-                                    <td class="px-6 py-4 text-gray-600">Logística: {{ $cost->description }}</td>
-                                    <td class="px-6 py-4 text-right text-gray-600">R$ {{ number_format($cost->cost, 2, ',', '.') }}</td>
-                                </tr>
-                                @endforeach
-                                
-                                <tr class="bg-gray-100">
-                                    <td class="px-6 py-4 font-bold text-gray-900 text-lg">VALOR TOTAL DA PROPOSTA</td>
-                                    <td class="px-6 py-4 text-right font-bold text-indigo-700 text-xl">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
-                                </tr>
+                                    @php
+                                        $equipId = $proposal->service_details['equipment_id'] ?? null;
+                                        $equipName = $equipId ? \App\Models\Settings\Equipment::find($equipId)->name ?? 'Não encontrado' : 'Não selecionado';
+                                    @endphp
+                                    @if($proposal->service_type != 'timelapse')
+                                    <tr>
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-900">Equipamento</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $equipName }} (Depreciação)</td>
+                                        <td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($costEquipProporcional, 2, ',', '.') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-300 text-right">--</td>
+                                    </tr>
+                                    @endif
 
-                                <tr class="bg-yellow-50">
-                                    <td class="px-6 py-4 text-sm text-yellow-800">Comissão Prevista (Vendedor)</td>
-                                    <td class="px-6 py-4 text-right text-sm font-bold text-yellow-700">
-                                        @if($proposal->commission_value)
-                                            R$ {{ number_format($proposal->commission_value, 2, ',', '.') }}
-                                        @else
-                                            <span class="text-xs font-normal">(Será gerada na aprovação)</span>
+                                    @if($proposal->service_type == 'timelapse')
+                                        <tr>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900">Serviço Timelapse</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500">{{ $proposal->service_details['months'] ?? 1 }} Meses</td>
+                                            <td class="px-6 py-4 text-sm text-gray-300 text-right">--</td>
+                                            <td class="px-6 py-4 text-sm font-bold text-gray-800 text-right">R$ {{ number_format(($proposal->service_details['monthly_cost'] ?? 0) * ($proposal->service_details['months'] ?? 1), 2, ',', '.') }}</td>
+                                        </tr>
+                                        @if(!empty($proposal->service_details['installation_cost']))
+                                        <tr>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900">Instalação (Setup)</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500">Taxa Única</td>
+                                            <td class="px-6 py-4 text-sm text-gray-800 text-right">R$ {{ number_format($proposal->service_details['installation_cost'], 2, ',', '.') }}</td>
+                                        </tr>
                                         @endif
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                    @else
+                                        <tr>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900">Mão de Obra</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500">Piloto / Operador</td>
+                                            <td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($proposal->service_details['labor_cost'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-800 text-right"> (Incluso no total) </td>
+                                        </tr>
+                                    @endif
+
+                                    @foreach($proposal->variableCosts as $cost)
+                                    <tr>
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-500">Logística</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $labels[$cost->description] ?? $cost->description }}</td>
+                                        <td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($cost->cost, 2, ',', '.') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-800 text-right">R$ {{ number_format($cost->cost, 2, ',', '.') }}</td>
+                                    </tr>
+                                    @endforeach
+
+                                    @if($proposal->courtesy)
+                                    <tr class="bg-blue-50">
+                                        <td class="px-6 py-4 text-sm font-bold text-blue-800">CORTESIA</td>
+                                        <td class="px-6 py-4 text-sm text-blue-800" colspan="3">{{ $proposal->courtesy }}</td>
+                                    </tr>
+                                    @endif
+
+                                    <tr class="bg-gray-100 border-t-2 border-gray-300">
+                                        <td class="px-6 py-4 text-base font-bold text-gray-900" colspan="3">VALOR FINAL DE VENDA</td>
+                                        <td class="px-6 py-4 text-xl font-bold text-indigo-700 text-right">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
+
+                    @if(in_array(Auth::user()->role, ['admin', 'financeiro']) || Auth::id() == $proposal->user_id)
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <h4 class="text-xs font-bold text-yellow-800 uppercase tracking-wide mb-1">Comissão do Vendedor</h4>
+                        <span class="text-lg font-bold text-yellow-900">
+                            @if($proposal->commission_value)
+                                R$ {{ number_format($proposal->commission_value, 2, ',', '.') }}
+                            @else
+                                <span class="text-sm font-normal italic">(Pendente de aprovação)</span>
+                            @endif
+                        </span>
+                    </div>
+                    @endif
 
                 </div>
             </div>
@@ -157,19 +210,25 @@
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div class="mt-3 text-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">Reprovar Proposta</h3>
-                <div class="mt-2 px-7 py-3">
-                    <p class="text-sm text-gray-500 mb-4">Informe o motivo para devolver ao vendedor.</p>
-                    <form action="{{ route('proposals.reject', $proposal->id) }}" method="POST">
-                        @csrf @method('PATCH')
-                        <textarea name="rejection_reason" class="w-full border-gray-300 rounded focus:ring-red-500 focus:border-red-500" rows="3" placeholder="Motivo..." required></textarea>
-                        <div class="mt-4 flex justify-between">
-                            <button type="button" onclick="document.getElementById('rejectModal').style.display='none'" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancelar</button>
-                            <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-bold">Confirmar</button>
-                        </div>
-                    </form>
-                </div>
+                <form action="{{ route('proposals.reject', $proposal->id) }}" method="POST" class="mt-2 px-2 py-3">
+                    @csrf @method('PATCH')
+                    <textarea name="rejection_reason" class="w-full border-gray-300 rounded" rows="3" placeholder="Motivo..." required></textarea>
+                    <div class="flex justify-between mt-4"><button type="button" onclick="document.getElementById('rejectModal').style.display='none'" class="px-4 py-2 bg-gray-200 rounded">Cancelar</button><button type="submit" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Confirmar</button></div>
+                </form>
             </div>
         </div>
     </div>
-
+    <div id="reverseModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden overflow-y-auto h-full w-full" style="z-index: 60;">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-xl rounded-md bg-white border-red-600">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-bold text-red-900">Estornar Venda Aprovada?</h3>
+                <form action="{{ route('proposals.reverseApproval', $proposal->id) }}" method="POST" class="mt-2 px-2 py-3">
+                    @csrf @method('PATCH')
+                    <p class="text-sm text-gray-500 mb-2 text-left">Ação irreversível. Zera comissão e remove das metas.</p>
+                    <textarea name="cancellation_reason" class="w-full border-gray-300 rounded focus:ring-red-500 focus:border-red-500" rows="3" placeholder="Motivo..." required></textarea>
+                    <div class="flex justify-between mt-4"><button type="button" onclick="document.getElementById('reverseModal').style.display='none'" class="px-4 py-2 bg-gray-200 rounded">Cancelar</button><button type="submit" class="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800">Estornar</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
 </x-app-layout>

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Hash; // Ainda precisamos dele para o 'store'
 use Illuminate\Validation\Rules;
 
 class UserController extends Controller
@@ -42,7 +42,7 @@ class UserController extends Controller
         User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $request->password, // O Model vai fazer o Hash sozinho
             'role' => $request->role,
         ]);
 
@@ -54,7 +54,6 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        // Não vamos usar a tela 'show' por enquanto
         return redirect()->route('admin.users.index');
     }
 
@@ -75,14 +74,17 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class.',email,'.$user->id],
             'role' => ['required', 'in:admin,financeiro,comercial,tecnico'],
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()], // Senha é opcional na edição
+            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $data = $request->only('name', 'email', 'role');
 
-        // Só atualiza a senha se o usuário digitou uma nova
+        // --- A CORREÇÃO ESTÁ AQUI ---
+        // Se o usuário digitou uma nova senha
         if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+            // ANTES (ERRADO): $data['password'] = Hash::make($request->password);
+            // AGORA (CORRETO): Apenas passamos a senha pura. O Model (User.php) vai criptografar.
+            $data['password'] = $request->password;
         }
 
         $user->update($data);
@@ -95,7 +97,6 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        // Evitar que o admin se auto-delete
         if ($user->id === auth()->id()) {
             return redirect()->route('admin.users.index')->with('error', 'Você não pode excluir seu próprio usuário.');
         }

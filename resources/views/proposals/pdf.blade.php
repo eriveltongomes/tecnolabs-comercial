@@ -93,7 +93,7 @@
             Empresa: {{ $proposal->client->name }}
         </div>
 
-        <p>Primeiramente gostaríamos de agradecer a oportunidade que nos foi concedida para demonstrar nossos serviços. Essa proposta de serviços representa a inovação em tecnologia nos serviços de filmagens e imagens aéreas de alta qualidade através de drones profissionais.</p>
+        <p>Primeiramente, gostaríamos de agradecer a oportunidade que nos foi concedida para demonstrar nossos serviços. Esta proposta abrange o nosso ecossistema de soluções tecnológicas, que inclui: <b>Serviços com Drone</b>, <b>Mapeamento Aéreo Georreferenciado</b>, <b>Tour Virtual 360°</b> e <b>Timelapse de Obra</b>, garantindo inovação e precisão para todas as etapas do seu projeto.</p>
         <p>Certos de estarmos apresentando uma alternativa de conquista e fidelização de vocês clientes e atendendo suas necessidades, estamos à disposição para outros esclarecimentos.</p>
 
         <h1>1. Quem Somos</h1>
@@ -248,14 +248,14 @@
             @if($proposal->service_type == 'timelapse')
                 <li>Acesso mensal ao equipamento para coleta de imagens.</li>
                 <li>Câmeras não se conectam a internet.</li>
-                <li>No caso de defeito no equipamento ou perda de imagem, o período não fotografado não será cobrado até que o equipamento volte a funcionar normalmente.</li>
+                <li>No caso de defeito no equipamento ou perda de imagem, o período não registrado não será cobrado até que o equipamento volte a funcionar normalmente.</li>
                 <li>20 fotos por dia, tiradas a cada meia hora.</li>
                 <li>A instalação do equipamento demanda local seguro.</li>
                 <li>Se for necessária a reposição do local do equipamento, pedimos para avisar com antecedência de 2 semanas.</li>
                 <li>A instalação e Remoção das câmeras serão responsabilidade da Tecnolabs.</li>
             @endif
         </ul>
-        <p><strong>Essa proposta tem validade de 10 dias. Após o vencimento será necessário solicitar um novo orçamento e verificar a disponibilidade de data do serviço</strong>.</p>
+        <p><strong>Essa proposta tem validade de 5 dias. Após o vencimento será necessário solicitar um novo orçamento e verificar a disponibilidade de data do serviço</strong>.</p>
 
         <h1>8. Observações</h1>
         <p>Essa proposta é única e exclusiva da <strong>{{ $proposal->client->name }}</strong> e não poderá ser repassada ou utilizada por outra empresa ou pessoa sem autorização prévia.</p>

@@ -1,6 +1,11 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Propostas Comerciais') }}</h2>
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight flex items-center space-x-2">
+            <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            <span>
+                {{ __('Propostas Comerciais') }}
+            </span>
+        </h2>
     </x-slot>
 
     <div class="py-12">
@@ -48,31 +53,46 @@
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
+                                    
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         
                                         @if(in_array($proposal->status, ['rascunho', 'aberta', 'enviada', 'reprovada']))
-                                            <form action="{{ route('proposals.sendToAnalysis', $proposal->id) }}" method="POST" class="inline-block" onsubmit="return confirm('O Cliente aprovou? Enviar para Financeiro?');">
+                                            <form action="{{ route('proposals.sendToAnalysis', $proposal->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Cliente aprovou?');">
                                                 @csrf @method('PATCH')
-                                                <button type="submit" class="text-green-600 hover:text-green-900 mr-2 font-bold" title="Cliente Aceitou">
-                                                    Aceitou
+                                                <button type="submit" class="text-green-600 hover:text-green-900 mr-2 font-bold" title="Cliente Aceitou (Enviar p/ Financeiro)">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                                 </button>
                                             </form>
-
-                                            <form action="{{ route('proposals.refuse', $proposal->id) }}" method="POST" class="inline-block" onsubmit="return confirm('O Cliente recusou a proposta? Isso fechará a negociação.');">
+                                            <form action="{{ route('proposals.refuse', $proposal->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Cliente recusou?');">
                                                 @csrf @method('PATCH')
-                                                <button type="submit" class="text-red-500 hover:text-red-800 mr-3 font-bold" title="Cliente Recusou">
-                                                    Recusou
+                                                <button type="submit" class="text-red-500 hover:text-red-800 mr-2 font-bold" title="Cliente Recusou">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                                 </button>
                                             </form>
                                         @endif
 
-                                        <a href="{{ route('proposals.pdf', $proposal->id) }}" target="_blank" class="text-red-600 hover:text-red-900 mr-3 font-bold" title="Baixar PDF">PDF</a>
+                                        <a href="{{ route('proposals.pdf', $proposal->id) }}" target="_blank" class="text-red-600 hover:text-red-900 mr-2 inline-block align-middle" title="Baixar PDF">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                        </a>
 
                                         @if(!in_array($proposal->status, ['aprovada', 'cancelada', 'em_analise', 'recusada']))
-                                            <a href="{{ route('proposals.edit', $proposal->id) }}" class="text-yellow-600 hover:text-yellow-900 mr-3 font-bold">Editar</a>
+                                            <a href="{{ route('proposals.edit', $proposal->id) }}" class="text-yellow-600 hover:text-yellow-900 mr-2 inline-block align-middle" title="Editar">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                            </a>
                                         @endif
                                         
-                                        <a href="{{ route('proposals.show', $proposal->id) }}" class="text-indigo-600 hover:text-indigo-900 font-bold">Ver</a>
+                                        <a href="{{ route('proposals.show', $proposal->id) }}" class="text-indigo-600 hover:text-indigo-900 mr-2 inline-block align-middle" title="Ver Detalhes">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                        </a>
+                                        
+                                        @if(Auth::user()->role == 'admin')
+                                            <form action="{{ route('proposals.destroy', $proposal->id) }}" method="POST" class="inline-block align-middle" onsubmit="return confirm('DELETAR? Ação permanente!');">
+                                                @csrf @method('DELETE')
+                                                <button type="submit" class="text-gray-400 hover:text-red-800" title="Deletar Proposta">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                                 @empty

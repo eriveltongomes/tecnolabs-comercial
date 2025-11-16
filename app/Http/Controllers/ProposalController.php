@@ -17,8 +17,8 @@ use Carbon\Carbon;
 
 class ProposalController extends Controller
 {
-    // --- LISTAGEM ---
-    public function index()
+    // ... (index, create - mantidos iguais) ...
+    public function index(Request $request)
     {
         $user = Auth::user();
         if (in_array($user->role, ['admin', 'financeiro'])) {
@@ -26,17 +26,12 @@ class ProposalController extends Controller
         } else {
             $query = Proposal::with(['client', 'channel'])->where('user_id', $user->id);
         }
-
-        // Filtro de Status (para o Financeiro ver só "em_analise")
-        if (request()->has('status') && !empty(request()->status)) {
-            $query->where('status', request()->status);
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
         }
-
         $proposals = $query->latest()->get();
         return view('proposals.index', compact('proposals'));
     }
-
-    // --- CRIAÇÃO ---
     public function create()
     {
         $user = Auth::user();
@@ -47,21 +42,20 @@ class ProposalController extends Controller
         }
         $channels = Channel::all();
         $equipments = Equipment::all();
-
         return view('proposals.create', compact('clients', 'channels', 'equipments'));
     }
 
+    // --- SALVAR (STORE) ---
     public function store(Request $request)
     {
         $data = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'channel_id' => 'required|exists:settings_channels,id',
             'service_type' => 'required|in:drone,timelapse,tour_virtual',
-            'profit_margin' => 'required', 
+            'profit_margin' => 'required|numeric|min:0', // Validar a margem
             'details' => 'nullable|array',
             'variable_costs' => 'nullable|array',
             'total_value' => 'required',
-            // Campos do Documento
             'service_location' => 'required|string|max:255',
             'service_date' => 'required|date',
             'payment_terms' => 'required|string|max:500',
@@ -76,14 +70,12 @@ class ProposalController extends Controller
         $proposal->channel_id = $data['channel_id'];
         $proposal->service_type = $data['service_type'];
         
-        // Preenche dados do documento
         $proposal->service_location = $data['service_location'];
         $proposal->service_date = $data['service_date'];
         $proposal->payment_terms = $data['payment_terms'];
         $proposal->courtesy = $data['courtesy'];
         $proposal->scope_description = $data['scope_description'];
         
-        // Limpeza de valores monetários
         $cleanDetails = $data['details'] ?? [];
         if(isset($cleanDetails['labor_cost'])) $cleanDetails['labor_cost'] = $this->parseMoney($cleanDetails['labor_cost']);
         if(isset($cleanDetails['monthly_cost'])) $cleanDetails['monthly_cost'] = $this->parseMoney($cleanDetails['monthly_cost']);
@@ -91,10 +83,10 @@ class ProposalController extends Controller
         
         $proposal->service_details = $cleanDetails;
         $proposal->total_value = $this->parseMoney($data['total_value']);
+        $proposal->profit_margin = $this->parseMoney($data['profit_margin']); // <-- SALVANDO A MARGEM
         $proposal->status = 'rascunho';
         $proposal->save();
 
-        // Salva custos variáveis
         if (!empty($request->variable_costs)) {
             foreach ($request->variable_costs as $desc => $val) {
                 $numericVal = $this->parseMoney($val);
@@ -105,32 +97,64 @@ class ProposalController extends Controller
         }
         
         if (function_exists('activity')) activity()->performedOn($proposal)->log('Criou a proposta');
-
         return redirect()->route('proposals.index')->with('success', 'Proposta criada com sucesso!');
     }
 
-    // --- EDIÇÃO ---
+    // --- VISUALIZAÇÃO (SHOW) ---
+    public function show(Proposal $proposal)
+    {
+        $this->authorizeView($proposal);
+        
+        // Recalcula custos ocultos para exibição
+        $totalMonthlyFixed = FixedCost::sum('monthly_value');
+        $fixedCostPerHour = $totalMonthlyFixed > 0 ? ($totalMonthlyFixed / 192) : 0;
+        
+        $details = $proposal->service_details;
+        $hours = floatval($details['period_hours'] ?? 0);
+        
+        $costFixedProporcional = 0;
+        $costEquipProporcional = 0;
+        $costCourseProporcional = 0; // Custo Cursos
+
+        // Recalcula Custo de Cursos (todos são somados, independente do equip)
+        $courses = Course::all();
+        foreach($courses as $cs) {
+            if ($cs->lifespan_hours > 0) $costCourseProporcional += ($cs->invested_value / $cs->lifespan_hours);
+        }
+        $costCourseProporcional = $costCourseProporcional * $hours; // Total de cursos
+
+        if ($proposal->service_type != 'timelapse') {
+            $costFixedProporcional = $fixedCostPerHour * $hours;
+            if (!empty($details['equipment_id'])) {
+                $equipment = Equipment::find($details['equipment_id']);
+                if ($equipment && $equipment->lifespan_hours > 0) {
+                    $hourlyDepreciation = $equipment->invested_value / $equipment->lifespan_hours;
+                    $costEquipProporcional = $hourlyDepreciation * $hours;
+                }
+            }
+        }
+        
+        // Recalcula Imposto (para ter certeza que está atualizado com as settings)
+        $taxes_percent = Tax::where('is_default', true)->sum('percentage');
+
+        return view('proposals.show', compact('proposal', 'costFixedProporcional', 'costEquipProporcional', 'costCourseProporcional', 'taxes_percent'));
+    }
+
+    // --- EDIÇÃO (FORMULÁRIO) ---
     public function edit(Proposal $proposal)
     {
         $this->authorizeEdit($proposal);
-        
         $user = Auth::user();
-        if (in_array($user->role, ['admin', 'financeiro'])) {
-            $clients = Client::all();
-        } else {
-            $clients = Client::where('created_by_user_id', $user->id)->get();
-        }
+        if (in_array($user->role, ['admin', 'financeiro'])) { $clients = Client::all(); } 
+        else { $clients = Client::where('created_by_user_id', $user->id)->get(); }
         $channels = Channel::all();
         $equipments = Equipment::all();
-
         $variableCosts = [];
-        foreach($proposal->variableCosts as $vc) {
-            $variableCosts[$vc->description] = $vc->cost; 
-        }
-
+        foreach($proposal->variableCosts as $vc) { $variableCosts[$vc->description] = $vc->cost; }
         return view('proposals.edit', compact('proposal', 'clients', 'channels', 'variableCosts', 'equipments'));
     }
 
+    // --- SALVAR EDIÇÃO (UPDATE) ---
     public function update(Request $request, Proposal $proposal)
     {
         $this->authorizeEdit($proposal);
@@ -140,7 +164,7 @@ class ProposalController extends Controller
             'channel_id' => 'required|exists:settings_channels,id',
             'service_type' => 'required|in:drone,timelapse,tour_virtual',
             'status' => 'required|in:rascunho,aberta,em_analise,cancelada',
-            'profit_margin' => 'required', 
+            'profit_margin' => 'required|numeric|min:0', // Validar a margem
             'details' => 'nullable|array',
             'variable_costs' => 'nullable|array',
             'total_value' => 'required',
@@ -167,6 +191,7 @@ class ProposalController extends Controller
         $proposal->scope_description = $data['scope_description'];
         $proposal->service_details = $cleanDetails;
         $proposal->total_value = $this->parseMoney($data['total_value']);
+        $proposal->profit_margin = $this->parseMoney($data['profit_margin']); // <-- SALVANDO A MARGEM
         
         if ($proposal->isDirty('status') && $proposal->getOriginal('status') == 'reprovada') {
             $proposal->rejection_reason = null;
@@ -187,47 +212,6 @@ class ProposalController extends Controller
         return redirect()->route('proposals.index')->with('success', 'Proposta atualizada com sucesso!');
     }
 
-    // --- VISUALIZAÇÃO (SHOW) ---
-    public function show(Proposal $proposal)
-    {
-        $this->authorizeView($proposal);
-
-        // CÁLCULO DE CUSTOS OCULTOS (PARA EXIBIR NA TELA)
-        $totalMonthlyFixed = FixedCost::sum('monthly_value');
-        $fixedCostPerHour = $totalMonthlyFixed > 0 ? ($totalMonthlyFixed / 192) : 0;
-        
-        $details = $proposal->service_details;
-        $hours = floatval($details['period_hours'] ?? 0);
-        
-        $costFixedProporcional = 0;
-        $costEquipProporcional = 0;
-
-        if ($proposal->service_type != 'timelapse') {
-            // Rateio Fixo
-            $costFixedProporcional = $fixedCostPerHour * $hours;
-
-            // Depreciação Equipamento Específico
-            if (!empty($details['equipment_id'])) {
-                $equipment = Equipment::find($details['equipment_id']);
-                if ($equipment && $equipment->lifespan_hours > 0) {
-                    $hourlyDepreciation = $equipment->invested_value / $equipment->lifespan_hours;
-                    $costEquipProporcional = $hourlyDepreciation * $hours;
-                }
-            }
-        }
-
-        return view('proposals.show', compact('proposal', 'costFixedProporcional', 'costEquipProporcional'));
-    }
-
-    // --- GERAÇÃO DE PDF ---
-    public function generatePdf(Proposal $proposal)
-    {
-        $this->authorizeView($proposal);
-        $pdf = Pdf::loadView('proposals.pdf', compact('proposal'));
-        $pdf->setPaper('a4', 'portrait');
-        return $pdf->stream('Proposta_' . $proposal->proposal_number . '.pdf');
-    }
-
     // --- CÁLCULADORA (AJAX) ---
     public function calculate(Request $request)
     {
@@ -240,18 +224,9 @@ class ProposalController extends Controller
         $totalVariable = 0;
         foreach ($vars as $cost) { $totalVariable += $this->parseMoney($cost); }
 
-        // Hora Técnica Base (Custos Fixos + Depreciação Média de Cursos)
         $totalMonthlyFixed = FixedCost::sum('monthly_value');
         $fixedCostPerHour = $totalMonthlyFixed > 0 ? ($totalMonthlyFixed / 192) : 0;
 
-        // Cursos (Sempre soma todos, conhecimento acumulado)
-        $courses = Course::all();
-        $courseDepreciationHour = 0;
-        foreach($courses as $cs) {
-            if ($cs->lifespan_hours > 0) $courseDepreciationHour += ($cs->invested_value / $cs->lifespan_hours);
-        }
-
-        // Equipamento (Específico selecionado no form)
         $equipDepreciationHour = 0;
         if (!empty($details['equipment_id'])) {
             $equipment = Equipment::find($details['equipment_id']);
@@ -260,6 +235,11 @@ class ProposalController extends Controller
             }
         }
 
+        $courses = Course::all();
+        $courseDepreciationHour = 0;
+        foreach($courses as $cs) {
+            if ($cs->lifespan_hours > 0) $courseDepreciationHour += ($cs->invested_value / $cs->lifespan_hours);
+        }
         $totalHourlyCostBase = $fixedCostPerHour + $equipDepreciationHour + $courseDepreciationHour;
 
         $serviceCost = 0;
@@ -277,7 +257,6 @@ class ProposalController extends Controller
         $totalCost = $serviceCost + $totalVariable;
         $taxes = Tax::where('is_default', true)->sum('percentage');
         
-        // Lógica de Comissão Acumulativa
         $estimatedPrice = $totalCost * 1.5;
         $commissionPercent = $this->getCommissionPercentageBasedOnHistory(Auth::id(), $channelId, $estimatedPrice);
 
@@ -294,31 +273,22 @@ class ProposalController extends Controller
         ]);
     }
 
-    // --- AÇÕES DE FLUXO ---
-    
-    public function sendToAnalysis(Proposal $proposal) {
-        $this->authorizeEdit($proposal); 
-        $proposal->update(['status' => 'em_analise']);
-        if (function_exists('activity')) activity()->performedOn($proposal)->log('Enviou para análise');
-        return redirect()->route('proposals.index')->with('success', 'Enviada para análise!');
+    // --- GERAÇÃO DE PDF ---
+    public function generatePdf(Proposal $proposal) {
+        $this->authorizeView($proposal);
+        $pdf = Pdf::loadView('proposals.pdf', compact('proposal'));
+        $pdf->setPaper('a4', 'portrait');
+        return $pdf->stream('Proposta_Tecnolabs_' . $proposal->proposal_number . '.pdf');
     }
 
-    public function cancel(Proposal $proposal) {
-        $this->authorizeEdit($proposal);
-        $proposal->update(['status' => 'cancelada']);
-        if (function_exists('activity')) activity()->performedOn($proposal)->log('Cancelou a proposta');
-        return redirect()->route('proposals.index')->with('success', 'Cancelada.');
-    }
+    // --- AÇÕES DE FLUXO (VENDEDOR) ---
+    public function sendToAnalysis(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'em_analise']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Enviou para análise'); return redirect()->route('proposals.index')->with('success', 'Enviada para análise!'); }
+    public function cancel(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'cancelada']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Cancelou a proposta'); return redirect()->route('proposals.index')->with('success', 'Cancelada.'); }
+    public function refuse(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'recusada']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Marcou como Recusada'); return redirect()->route('proposals.index')->with('success', 'Proposta RECUSADA.'); }
 
-    public function refuse(Proposal $proposal) {
-        $this->authorizeEdit($proposal);
-        $proposal->update(['status' => 'recusada']);
-        if (function_exists('activity')) activity()->performedOn($proposal)->log('Marcou como Recusada pelo Cliente');
-        return redirect()->route('proposals.index')->with('success', 'Proposta RECUSADA pelo cliente.');
-    }
-
+    // --- AÇÕES DE FLUXO (FINANCEIRO / ADMIN) ---
     public function approve(Proposal $proposal) {
-        $user = Auth::user();
+        $user = Auth::user(); 
         if (!in_array($user->role, ['admin', 'financeiro'])) abort(403);
         
         $finalValue = $proposal->total_value;
@@ -333,13 +303,11 @@ class ProposalController extends Controller
             'rejection_reason' => null
         ]);
         
-        if (function_exists('activity')) activity()->performedOn($proposal)->log('Aprovou a proposta. Comissão: R$ ' . $commissionValue);
-
+        if (function_exists('activity')) activity()->performedOn($proposal)->log('Aprovou (Comissão: R$ ' . $commissionValue . ')');
         return redirect()->back()->with('success', 'Proposta APROVADA!');
     }
-
     public function reject(Request $request, Proposal $proposal) {
-        $user = Auth::user();
+        $user = Auth::user(); 
         if (!in_array($user->role, ['admin', 'financeiro'])) abort(403);
         $request->validate(['rejection_reason' => 'required|string|max:500']);
         
@@ -352,12 +320,10 @@ class ProposalController extends Controller
         ]);
         
         if (function_exists('activity')) activity()->performedOn($proposal)->withProperties(['motivo' => $request->rejection_reason])->log('Reprovou a proposta');
-
         return redirect()->back()->with('success', 'Reprovada.');
     }
-
     public function reverseApproval(Request $request, Proposal $proposal) {
-        $user = Auth::user();
+        $user = Auth::user(); 
         if (!in_array($user->role, ['admin', 'financeiro'])) abort(403);
         $request->validate(['cancellation_reason' => 'required|string|max:500']);
 
@@ -369,55 +335,29 @@ class ProposalController extends Controller
             'approved_at' => null
         ]);
 
-        if (function_exists('activity')) activity()->performedOn($proposal)->withProperties(['motivo' => $request->cancellation_reason])->log('REALIZOU ESTORNO (Cancelou venda aprovada)');
-
+        if (function_exists('activity')) activity()->performedOn($proposal)->withProperties(['motivo' => $request->cancellation_reason])->log('REALIZOU ESTORNO');
         return redirect()->back()->with('success', 'Venda estornada com sucesso!');
     }
-
     public function destroy(Proposal $proposal) {
-        $this->authorizeEdit($proposal); 
+        $user = Auth::user();
+        if ($user->role !== 'admin') {
+            abort(403, 'Ação não autorizada.');
+        }
+        if (function_exists('activity')) activity()->performedOn($proposal)->log('DELETOU a proposta permanentemente');
         $proposal->delete();
-        return redirect()->route('proposals.index')->with('success', 'Deletado.');
+        return redirect()->route('proposals.index')->with('success', 'Proposta deletada permanentemente.');
     }
 
-    // --- HELPER METHODS ---
-
+    // --- MÉTODOS AUXILIARES ---
     private function getCommissionPercentageBasedOnHistory($userId, $channelId, $currentValue) {
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
+        $startOfMonth = Carbon::now()->startOfMonth(); $endOfMonth = Carbon::now()->endOfMonth();
         $monthlySales = Proposal::where('user_id', $userId)->where('status', 'aprovada')->whereBetween('approved_at', [$startOfMonth, $endOfMonth])->sum('total_value');
         $projectedTotal = $monthlySales + $currentValue;
-        
-        $commissionRule = CommissionRule::where('channel_id', $channelId)
-            ->whereHas('revenueTier', function($q) use ($projectedTotal) {
-                $q->where('min_value', '<=', $projectedTotal)->where('max_value', '>=', $projectedTotal);
-            })->first();
-            
-        if (!$commissionRule) {
-            $commissionRule = CommissionRule::where('channel_id', $channelId)->orderByDesc('percentage')->first();
-        }
+        $commissionRule = CommissionRule::where('channel_id', $channelId)->whereHas('revenueTier', function($q) use ($projectedTotal) { $q->where('min_value', '<=', $projectedTotal)->where('max_value', '>=', $projectedTotal); })->first();
+        if (!$commissionRule) $commissionRule = CommissionRule::where('channel_id', $channelId)->orderByDesc('percentage')->first();
         return $commissionRule ? $commissionRule->percentage : 0;
     }
-
-    private function parseMoney($value) {
-        if (empty($value)) return 0;
-        if (is_numeric($value)) return floatval($value);
-        $clean = str_replace(['.', 'R$', ' '], '', $value);
-        $clean = str_replace(',', '.', $clean);
-        return floatval($clean);
-    }
-
-    private function authorizeView(Proposal $proposal) {
-        $user = Auth::user();
-        if (in_array($user->role, ['admin', 'financeiro'])) return;
-        if ($proposal->user_id !== $user->id) abort(403);
-    }
-
-    private function authorizeEdit(Proposal $proposal) {
-        $user = Auth::user();
-        if ($user->role === 'comercial' && $proposal->user_id !== $user->id) abort(403);
-        if (in_array($proposal->status, ['aprovada', 'cancelada', 'recusada'])) {
-             if ($user->role === 'comercial') abort(403, 'Proposta finalizada.');
-        }
-    }
+    private function parseMoney($value) { if (empty($value)) return 0; if (is_numeric($value)) return floatval($value); $clean = str_replace(['.', 'R$', ' '], '', $value); $clean = str_replace(',', '.', $clean); return floatval($clean); }
+    private function authorizeView(Proposal $proposal) { $user = Auth::user(); if (in_array($user->role, ['admin', 'financeiro'])) return; if ($proposal->user_id !== $user->id) abort(403); }
+    private function authorizeEdit(Proposal $proposal) { $user = Auth::user(); if ($user->role === 'admin') return; if ($user->role === 'comercial' && $proposal->user_id !== $user->id) abort(403); if (in_array($proposal->status, ['aprovada', 'cancelada', 'recusada'])) { if ($user->role === 'comercial') abort(403, 'Proposta finalizada.'); } }
 }

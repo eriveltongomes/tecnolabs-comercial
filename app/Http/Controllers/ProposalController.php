@@ -17,7 +17,7 @@ use Carbon\Carbon;
 
 class ProposalController extends Controller
 {
-    // ... (index, create - mantidos iguais) ...
+    // --- LISTAGEM ---
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -32,6 +32,8 @@ class ProposalController extends Controller
         $proposals = $query->latest()->get();
         return view('proposals.index', compact('proposals'));
     }
+
+    // --- CRIAÇÃO ---
     public function create()
     {
         $user = Auth::user();
@@ -284,7 +286,30 @@ class ProposalController extends Controller
     // --- AÇÕES DE FLUXO (VENDEDOR) ---
     public function sendToAnalysis(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'em_analise']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Enviou para análise'); return redirect()->route('proposals.index')->with('success', 'Enviada para análise!'); }
     public function cancel(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'cancelada']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Cancelou a proposta'); return redirect()->route('proposals.index')->with('success', 'Cancelada.'); }
-    public function refuse(Proposal $proposal) { $this->authorizeEdit($proposal); $proposal->update(['status' => 'recusada']); if (function_exists('activity')) activity()->performedOn($proposal)->log('Marcou como Recusada'); return redirect()->route('proposals.index')->with('success', 'Proposta RECUSADA.'); }
+
+    // --- MÉTODO "REFUSE" ATUALIZADO ---
+    public function refuse(Request $request, Proposal $proposal) { 
+        $this->authorizeEdit($proposal);
+
+        // Valida o novo campo que vem do modal
+        $request->validate([
+            'rejection_reason' => 'required|string|max:500'
+        ]);
+
+        $proposal->update([
+            'status' => 'recusada',
+            'rejection_reason' => $request->rejection_reason // Salva o motivo
+        ]); 
+        
+        if (function_exists('activity')) {
+            activity()->performedOn($proposal)
+                      ->withProperties(['motivo' => $request->rejection_reason])
+                      ->log('Marcou como Recusada (Cliente)');
+        }
+        
+        // Se veio da tela de 'show', volta para 'show'. Se veio da 'index', volta para 'index'.
+        return redirect()->back()->with('success', 'Proposta marcada como RECUSADA.');
+    }
 
     // --- AÇÕES DE FLUXO (FINANCEIRO / ADMIN) ---
     public function approve(Proposal $proposal) {
@@ -349,14 +374,7 @@ class ProposalController extends Controller
     }
 
     // --- MÉTODOS AUXILIARES ---
-    private function getCommissionPercentageBasedOnHistory($userId, $channelId, $currentValue) {
-        $startOfMonth = Carbon::now()->startOfMonth(); $endOfMonth = Carbon::now()->endOfMonth();
-        $monthlySales = Proposal::where('user_id', $userId)->where('status', 'aprovada')->whereBetween('approved_at', [$startOfMonth, $endOfMonth])->sum('total_value');
-        $projectedTotal = $monthlySales + $currentValue;
-        $commissionRule = CommissionRule::where('channel_id', $channelId)->whereHas('revenueTier', function($q) use ($projectedTotal) { $q->where('min_value', '<=', $projectedTotal)->where('max_value', '>=', $projectedTotal); })->first();
-        if (!$commissionRule) $commissionRule = CommissionRule::where('channel_id', $channelId)->orderByDesc('percentage')->first();
-        return $commissionRule ? $commissionRule->percentage : 0;
-    }
+    private function getCommissionPercentageBasedOnHistory($userId, $channelId, $currentValue) { $startOfMonth = Carbon::now()->startOfMonth(); $endOfMonth = Carbon::now()->endOfMonth(); $monthlySales = Proposal::where('user_id', $userId)->where('status', 'aprovada')->whereBetween('approved_at', [$startOfMonth, $endOfMonth])->sum('total_value'); $projectedTotal = $monthlySales + $currentValue; $commissionRule = CommissionRule::where('channel_id', $channelId)->whereHas('revenueTier', function($q) use ($projectedTotal) { $q->where('min_value', '<=', $projectedTotal)->where('max_value', '>=', $projectedTotal); })->first(); if (!$commissionRule) $commissionRule = CommissionRule::where('channel_id', $channelId)->orderByDesc('percentage')->first(); return $commissionRule ? $commissionRule->percentage : 0; }
     private function parseMoney($value) { if (empty($value)) return 0; if (is_numeric($value)) return floatval($value); $clean = str_replace(['.', 'R$', ' '], '', $value); $clean = str_replace(',', '.', $clean); return floatval($clean); }
     private function authorizeView(Proposal $proposal) { $user = Auth::user(); if (in_array($user->role, ['admin', 'financeiro'])) return; if ($proposal->user_id !== $user->id) abort(403); }
     private function authorizeEdit(Proposal $proposal) { $user = Auth::user(); if ($user->role === 'admin') return; if ($user->role === 'comercial' && $proposal->user_id !== $user->id) abort(403); if (in_array($proposal->status, ['aprovada', 'cancelada', 'recusada'])) { if ($user->role === 'comercial') abort(403, 'Proposta finalizada.'); } }

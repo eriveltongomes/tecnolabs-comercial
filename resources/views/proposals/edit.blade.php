@@ -58,24 +58,22 @@
                         </div>
 
                         <div class="border-b pb-4 mb-4 bg-blue-50 p-4 rounded">
-                            <h3 class="text-lg font-medium text-blue-900 mb-4">Informações do Documento (PDF)</h3>
-                            
+                            <h3 class="text-lg font-medium text-blue-900 mb-4">Informações do Documento</h3>
                             <div class="mb-4">
                                 <x-input-label for="scope_description" :value="__('Escopo do Serviço')" />
                                 <textarea id="scope_description" name="scope_description" x-model="formData.scope_description" class="block mt-1 w-full border-gray-300 rounded-md" rows="4" required></textarea>
                             </div>
-
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><x-input-label for="service_location" :value="__('Local do Serviço')" /><x-text-input id="service_location" class="block mt-1 w-full" type="text" name="service_location" x-model="formData.service_location" required /></div>
-                                <div><x-input-label for="service_date" :value="__('Data de Execução')" /><x-text-input id="service_date" class="block mt-1 w-full" type="date" name="service_date" x-model="formData.service_date" required /></div>
-                                <div class="md:col-span-2"><x-input-label for="payment_terms" :value="__('Condições de Pagamento')" /><x-text-input id="payment_terms" class="block mt-1 w-full" type="text" name="payment_terms" x-model="formData.payment_terms" required /></div>
-                                <div class="md:col-span-2"><x-input-label for="courtesy" :value="__('Cortesia (Opcional)')" /><x-text-input id="courtesy" class="block mt-1 w-full" type="text" name="courtesy" x-model="formData.courtesy" /></div>
+                                <div><x-input-label for="service_location" :value="__('Local')" /><x-text-input id="service_location" class="block mt-1 w-full" type="text" name="service_location" x-model="formData.service_location" required /></div>
+                                <div><x-input-label for="service_date" :value="__('Data')" /><x-text-input id="service_date" class="block mt-1 w-full" type="date" name="service_date" x-model="formData.service_date" required /></div>
+                                <div class="md:col-span-2"><x-input-label for="payment_terms" :value="__('Pagamento')" /><x-text-input id="payment_terms" class="block mt-1 w-full" type="text" name="payment_terms" x-model="formData.payment_terms" required /></div>
+                                <div class="md:col-span-2"><x-input-label for="courtesy" :value="__('Cortesia')" /><x-text-input id="courtesy" class="block mt-1 w-full" type="text" name="courtesy" x-model="formData.courtesy" /></div>
                             </div>
                         </div>
 
                         <div class="border-b pb-4 mb-4 bg-indigo-50 p-4 rounded">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                                <div class="col-span-2"><h3 class="text-lg font-medium text-indigo-900">Margem</h3></div>
+                                <div class="col-span-2"><h3 class="text-lg font-medium text-indigo-900">Margem de Lucro</h3></div>
                                 <div><x-input-label for="profit_margin" :value="__('%')" /><x-text-input x-model="formData.profit_margin" class="block mt-1 w-full" type="number" step="0.01" name="profit_margin" required /></div>
                             </div>
                         </div>
@@ -118,10 +116,16 @@
                         </div>
 
                         <div class="bg-gray-800 text-white p-6 rounded-lg">
-                            <div class="flex justify-between items-center mb-4">
-                                <div class="text-xl font-bold">Total: <span class="text-green-400" x-text="formatMoney(results.final_price)"></span></div>
-                                <div class="flex space-x-2">
-                                    <button type="button" @click="if(confirm('Cancelar?')) document.getElementById('cancelForm').submit()" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white text-sm font-bold">Cancelar Proposta</button>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm">
+                                <div><span class="block text-gray-400">Custo Base</span><span class="font-bold text-lg" x-text="formatMoney(results.total_cost)"></span></div>
+                                <div><span class="block text-gray-400">Impostos</span><span class="font-bold text-lg" x-text="results.taxes_percent + '%'"></span></div>
+                                <div><span class="block text-gray-400">Comissão</span><span class="font-bold text-lg text-yellow-400" x-text="results.commission_percent + '%'"></span></div>
+                                <div><span class="block text-gray-400">Valor Comissão</span><span class="font-bold text-lg" x-text="formatMoney(results.commission_value)"></span></div>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-gray-600 pt-4">
+                                <div class="text-2xl font-bold">Total: <span class="text-green-400" x-text="formatMoney(results.final_price)"></span></div>
+                                <div class="flex space-x-3">
+                                    <a href="{{ route('proposals.index') }}" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-bold flex items-center">Cancelar</a>
                                     <button type="button" @click="calculate()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 rounded text-white font-bold">Recalcular</button>
                                     <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-bold">Salvar</button>
                                 </div>
@@ -131,7 +135,7 @@
                     
                     @if($proposal->status == 'rascunho' || $proposal->status == 'aberta')
                     <div class="mt-6 text-right border-t pt-4">
-                        <p class="text-gray-600 text-sm mb-2">Quando estiver pronto:</p>
+                        <p class="text-gray-600 text-sm mb-2">Enviar:</p>
                         <form action="{{ route('proposals.sendToAnalysis', $proposal->id) }}" method="POST" onsubmit="return confirm('Enviar?');">
                             @csrf @method('PATCH')
                             <button type="submit" class="px-6 py-3 bg-green-600 hover:bg-green-700 rounded text-white font-bold shadow-lg uppercase tracking-wider">Enviar para Aprovação</button>
@@ -154,8 +158,9 @@
                 formData: {
                     client_id: '{{ $proposal->client_id }}',
                     channel_id: '{{ $proposal->channel_id }}',
-                    profit_margin: 20,
-                    // Preenche com dados do banco
+                    // CORREÇÃO: Carrega a margem do banco
+                    profit_margin: {{ $proposal->profit_margin ?? 20 }},
+                    
                     service_location: '{{ $proposal->service_location }}',
                     service_date: '{{ $proposal->service_date ? $proposal->service_date->format("Y-m-d") : "" }}',
                     payment_terms: '{{ $proposal->payment_terms }}',

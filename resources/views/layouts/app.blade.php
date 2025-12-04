@@ -27,19 +27,57 @@
                 @endif
 
                 <main>
+                    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 mt-4">
+                        
+                        @if ($message = session()->pull('success'))
+                            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+                                <strong class="font-bold">Sucesso!</strong>
+                                <span class="block sm:inline">{{ $message }}</span>
+                            </div>
+                        @endif
+
+                        @if ($message = session()->pull('error'))
+                            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                                <strong class="font-bold">Erro!</strong>
+                                <span class="block sm:inline">{{ $message }}</span>
+                            </div>
+                        @endif
+                        
+                        @if ($message = session()->pull('info'))
+                            <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative mb-4" role="alert">
+                                <strong class="font-bold">Info:</strong>
+                                <span class="block sm:inline">{{ $message }}</span>
+                            </div>
+                        @endif
+
+                        @if ($errors->any())
+                            <div class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded relative mb-4">
+                                <ul class="list-disc list-inside">
+                                    @foreach ($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+                    </div>
+
                     {{ $slot }}
                 </main>
             </div>
 
-            <footer class="py-6 text-center text-xs text-gray-400 border-t border-gray-200 mt-10">
-                <p class="mb-1">
-                    <strong>Tecnolabs Sistema Comercial</strong> &copy; {{ date('Y') }}
-                </p>
-                <p>
-                    Versão <strong>{{ config('app.version') }}</strong> 
-                    <span class="mx-1">•</span>
-                    Desenvolvido por <strong>Tecnolabs - Agência Digital</strong>
-                </p>
+            <footer class="bg-white border-t border-gray-200 mt-10">
+                <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                    <div class="flex flex-col md:flex-row justify-between items-center text-sm text-gray-500">
+                        <div>
+                            &copy; {{ date('Y') }} Tecnolabs - Sistema Comercial. Todos os direitos reservados.
+                        </div>
+                        <div class="flex items-center mt-2 md:mt-0 space-x-4">
+                            <span>Versão {{ config('app.version') }}</span>
+                            <span class="hidden md:inline">|</span>
+                            <span>Desenvolvido por Tecnolabs</span>
+                        </div>
+                    </div>
+                </div>
             </footer>
 
         </div>

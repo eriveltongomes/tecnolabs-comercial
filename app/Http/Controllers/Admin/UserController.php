@@ -5,31 +5,22 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash; // Ainda precisamos dele para o 'store'
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 
 class UserController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
         $users = User::all();
         return view('admin.users.index', compact('users'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         return view('admin.users.create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $request->validate([
@@ -37,71 +28,56 @@ class UserController extends Controller
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => ['required', 'in:admin,financeiro,comercial,tecnico'],
+            'decea_profile_id' => ['nullable', 'string', 'max:50'], // NOVO
         ]);
 
         User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => $request->password, // O Model vai fazer o Hash sozinho
+            'password' => $request->password, // O Mutator do Model faz o Hash
             'role' => $request->role,
+            'decea_profile_id' => $request->decea_profile_id, // NOVO
         ]);
 
         return redirect()->route('admin.users.index')->with('success', 'Usuário criado com sucesso.');
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(User $user)
-    {
-        return redirect()->route('admin.users.index');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(User $user)
     {
         return view('admin.users.edit', compact('user'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, User $user)
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class.',email,'.$user->id],
             'role' => ['required', 'in:admin,financeiro,comercial,tecnico'],
+            'decea_profile_id' => ['nullable', 'string', 'max:50'], // NOVO
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $data = $request->only('name', 'email', 'role');
+        $data = $request->only('name', 'email', 'role', 'decea_profile_id');
 
-        // --- A CORREÇÃO ESTÁ AQUI ---
-        // Se o usuário digitou uma nova senha
         if ($request->filled('password')) {
-            // ANTES (ERRADO): $data['password'] = Hash::make($request->password);
-            // AGORA (CORRETO): Apenas passamos a senha pura. O Model (User.php) vai criptografar.
-            $data['password'] = $request->password;
+            // Aqui precisamos fazer o hash manual ou confiar no mutator se setar a propriedade
+            $user->password = $request->password; 
         }
-
-        $user->update($data);
+        
+        // Update seguro
+        $user->name = $data['name'];
+        $user->email = $data['email'];
+        $user->role = $data['role'];
+        $user->decea_profile_id = $data['decea_profile_id'];
+        $user->save();
 
         return redirect()->route('admin.users.index')->with('success', 'Usuário atualizado com sucesso.');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(User $user)
     {
-        if ($user->id === auth()->id()) {
-            return redirect()->route('admin.users.index')->with('error', 'Você não pode excluir seu próprio usuário.');
-        }
-
+        if ($user->id === auth()->id()) return redirect()->route('admin.users.index')->with('error', 'Erro.');
         $user->delete();
-        return redirect()->route('admin.users.index')->with('success', 'Usuário excluído com sucesso.');
+        return redirect()->route('admin.users.index')->with('success', 'Usuário excluído.');
     }
 }

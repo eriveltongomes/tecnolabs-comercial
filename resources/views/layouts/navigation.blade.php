@@ -14,6 +14,7 @@
                         Dashboard
                     </x-nav-link>
 
+                    @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'comercial']))
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
                         <x-dropdown align="top" width="48">
                             <x-slot name="trigger">
@@ -33,6 +34,7 @@
                             </x-slot>
                         </x-dropdown>
                     </div>
+                    @endif
 
                     @if(in_array(Auth::user()->role, ['admin', 'financeiro']))
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
@@ -54,34 +56,30 @@
 
                     @if(in_array(Auth::user()->role, ['admin', 'financeiro']))
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
-                        <x-dropdown align="top" width="56"> <x-slot name="trigger">
+                        <x-dropdown align="top" width="56"> 
+                            <x-slot name="trigger">
                                 <button class="flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 focus:outline-none transition duration-150 ease-in-out">
                                     <div>Relatórios</div>
                                     <div class="ml-1"><svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></div>
                                 </button>
                             </x-slot>
                             <x-slot name="content">
-                                <x-dropdown-link :href="route('reports.commissions')" :active="request()->routeIs('reports.commissions')">
-                                    Pagamento de Comissões
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('reports.performance')" :active="request()->routeIs('reports.performance')">
-                                    Performance (Faturamento)
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('reports.profitability')" :active="request()->routeIs('reports.profitability')">
-                                    Rentabilidade (Lucro)
-                                </x-dropdown-link>
-                                <x-dropdown-link :href="route('reports.clients')" :active="request()->routeIs('reports.clients')">
-                                    Top Clientes (Curva ABC)
-                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.commissions')" :active="request()->routeIs('reports.commissions')">Pagamento de Comissões</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.performance')" :active="request()->routeIs('reports.performance')">Performance (Faturamento)</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.profitability')" :active="request()->routeIs('reports.profitability')">Rentabilidade (Lucro)</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.clients')" :active="request()->routeIs('reports.clients')">Top Clientes</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.efficiency')" :active="request()->routeIs('reports.efficiency')">Eficiência (Funil)</x-dropdown-link>
                                 <div class="border-t border-gray-100 my-1"></div>
-                                <x-dropdown-link :href="route('reports.efficiency')" :active="request()->routeIs('reports.efficiency')">
-                                    Eficiência (Funil)
-                                </x-dropdown-link>
+                                <div class="block px-4 py-2 text-xs text-gray-400">Operacional</div>
+                                <x-dropdown-link :href="route('reports.operationalEquipment')" :active="request()->routeIs('reports.operationalEquipment')">Diário de Bordo (Equip)</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.operationalProductivity')" :active="request()->routeIs('reports.operationalProductivity')">Produtividade Equipe</x-dropdown-link>
+                                <x-dropdown-link :href="route('reports.operationalStatus')" :active="request()->routeIs('reports.operationalStatus')">Mapa de Status</x-dropdown-link>
                             </x-slot>
                         </x-dropdown>
                     </div>
                     @endif
 
+                    @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'tecnico', 'comercial']))
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
                         <x-dropdown align="top" width="48">
                             <x-slot name="trigger">
@@ -91,11 +89,15 @@
                                 </button>
                             </x-slot>
                             <x-slot name="content">
-                                <x-dropdown-link href="#">Checklist (Em breve)</x-dropdown-link>
-                                <x-dropdown-link href="#">Análise de Risco (Em breve)</x-dropdown-link>
-                            </x-slot>
+                                <x-dropdown-link :href="route('work-orders.myServices')" :active="request()->routeIs('work-orders.myServices')">
+                                    📱 Meus Serviços (Piloto)
+                                </x-dropdown-link>
+                                <x-dropdown-link :href="route('work-orders.index')" :active="request()->routeIs('work-orders.index')">Gestão de OS</x-dropdown-link>
+                                <x-dropdown-link :href="route('work-orders.create')" :active="request()->routeIs('work-orders.create')">Nova OS Avulsa</x-dropdown-link>
+                                </x-slot>
                         </x-dropdown>
                     </div>
+                    @endif
 
                     @if(Auth::user()->role == 'admin')
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
@@ -107,16 +109,22 @@
                                 </button>
                             </x-slot>
                             <x-slot name="content">
+                                <div class="block px-4 py-2 text-xs text-gray-400">Operacional</div>
+                                <x-dropdown-link :href="route('checklist-models.index')" :active="request()->routeIs('checklist-models.*')">Modelos de Checklist</x-dropdown-link>
+                                
+                                <div class="border-t border-gray-100 my-1"></div>
                                 <div class="block px-4 py-2 text-xs text-gray-400">Cálculo</div>
                                 <x-dropdown-link :href="route('settings.equipment.index')">Equipamentos</x-dropdown-link>
                                 <x-dropdown-link :href="route('settings.courses.index')">Cursos</x-dropdown-link>
                                 <x-dropdown-link :href="route('settings.taxes.index')">Impostos</x-dropdown-link>
                                 <x-dropdown-link :href="route('settings.fixed-costs.index')">Custos Fixos</x-dropdown-link>
+                                
                                 <div class="border-t border-gray-100 my-1"></div>
                                 <div class="block px-4 py-2 text-xs text-gray-400">Comercial</div>
                                 <x-dropdown-link :href="route('settings.channels.index')">Canais</x-dropdown-link>
                                 <x-dropdown-link :href="route('settings.revenue-tiers.index')">Metas</x-dropdown-link>
                                 <x-dropdown-link :href="route('settings.commission-rules.index')">Regras Comissão</x-dropdown-link>
+                                
                                 <div class="border-t border-gray-100 my-1"></div>
                                 <div class="block px-4 py-2 text-xs text-gray-400">Sistema</div>
                                 <x-dropdown-link :href="route('admin.users.index')">Usuários</x-dropdown-link>
@@ -154,29 +162,41 @@
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">Dashboard</x-responsive-nav-link>
             
+            @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'comercial']))
             <div class="pt-2 pb-1 border-t border-gray-200"><div class="px-4 text-xs text-gray-400 uppercase">Comercial</div></div>
             <x-responsive-nav-link :href="route('clients.index')" :active="request()->routeIs('clients.*')">Clientes</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('proposals.index')" :active="request()->routeIs('proposals.*')">Propostas</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('stats.index')" :active="request()->routeIs('stats.*')">Meus Resultados</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('reports.efficiency')" :active="request()->routeIs('reports.efficiency')">Minha Eficiência (Funil)</x-responsive-nav-link>
+            @endif
 
             @if(in_array(Auth::user()->role, ['admin', 'financeiro']))
             <div class="pt-2 pb-1 border-t border-gray-200"><div class="px-4 text-xs text-gray-400 uppercase">Financeiro</div></div>
             <x-responsive-nav-link :href="route('proposals.index', ['status' => 'em_analise'])">Aprovações Pendentes</x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('finance.audit')" :active="request()->routeIs('finance.audit')">Auditoria / Logs</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('finance.audit')" :active="request()->routeIs('finance.audit')">Auditoria</x-responsive-nav-link>
             @endif
 
             @if(in_array(Auth::user()->role, ['admin', 'financeiro']))
             <div class="pt-2 pb-1 border-t border-gray-200"><div class="px-4 text-xs text-gray-400 uppercase">Relatórios</div></div>
             <x-responsive-nav-link :href="route('reports.commissions')" :active="request()->routeIs('reports.commissions')">Pagamento de Comissões</x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('reports.performance')" :active="request()->routeIs('reports.performance')">Performance (Faturamento)</x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('reports.profitability')" :active="request()->routeIs('reports.profitability')">Rentabilidade (Lucro)</x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('reports.clients')" :active="request()->routeIs('reports.clients')">Top Clientes (Curva ABC)</x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('reports.efficiency')" :active="request()->routeIs('reports.efficiency')">Eficiência (Funil)</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.performance')" :active="request()->routeIs('reports.performance')">Performance</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.profitability')" :active="request()->routeIs('reports.profitability')">Rentabilidade</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.clients')" :active="request()->routeIs('reports.clients')">Top Clientes</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.operationalEquipment')" :active="request()->routeIs('reports.operationalEquipment')">Diário de Bordo (Equip)</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.operationalProductivity')" :active="request()->routeIs('reports.operationalProductivity')">Produtividade Equipe</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('reports.operationalStatus')" :active="request()->routeIs('reports.operationalStatus')">Mapa de Status</x-dropdown-link>
+            @endif
+
+            @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'tecnico', 'comercial']))
+            <div class="pt-2 pb-1 border-t border-gray-200"><div class="px-4 text-xs text-gray-400 uppercase">Operacional</div></div>
+            <x-responsive-nav-link :href="route('work-orders.myServices')" :active="request()->routeIs('work-orders.myServices')">Meus Serviços</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('work-orders.index')" :active="request()->routeIs('work-orders.index')">Gestão de OS</x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('work-orders.create')" :active="request()->routeIs('work-orders.create')">Nova OS Avulsa</x-responsive-nav-link>
             @endif
 
             @if(Auth::user()->role == 'admin')
             <div class="pt-2 pb-1 border-t border-gray-200"><div class="px-4 text-xs text-gray-400 uppercase">Configurações</div></div>
+            <x-responsive-nav-link :href="route('checklist-models.index')" :active="request()->routeIs('checklist-models.index')">Modelos de Checklist</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('settings.index')">Painel de Configurações</x-responsive-nav-link>
             @endif
         </div>

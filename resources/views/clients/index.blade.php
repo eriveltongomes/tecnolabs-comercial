@@ -1,12 +1,8 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight flex items-center space-x-2">
-            
             <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-            
-            <span>
-                {{ __('Meus Clientes') }}
-            </span>
+            <span>{{ __('Meus Clientes') }}</span>
         </h2>
     </x-slot>
 
@@ -20,12 +16,6 @@
                             Novo Cliente
                         </a>
                     </div>
-
-                    @if(session('success'))
-                        <div class="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-                            {{ session('success') }}
-                        </div>
-                    @endif
 
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -57,7 +47,6 @@
                                     @endif
                                     
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right">
-                                        
                                         <a href="{{ route('clients.edit', $client->id) }}" class="text-indigo-600 hover:text-indigo-900 inline-block align-middle" title="Editar Cliente">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                         </a>

@@ -25,6 +25,10 @@ class EquipmentController extends Controller
             'name' => 'required|string|max:255',
             'invested_value' => 'required|numeric|min:0',
             'lifespan_hours' => 'required|integer|min:1',
+            // NOVOS CAMPOS
+            'anac_registration' => 'nullable|string|max:255',
+            'insurance_policy' => 'nullable|string|max:255',
+            'insurance_company' => 'nullable|string|max:255',
         ]);
 
         Equipment::create($request->all());
@@ -43,6 +47,10 @@ class EquipmentController extends Controller
             'name' => 'required|string|max:255',
             'invested_value' => 'required|numeric|min:0',
             'lifespan_hours' => 'required|integer|min:1',
+            // NOVOS CAMPOS
+            'anac_registration' => 'nullable|string|max:255',
+            'insurance_policy' => 'nullable|string|max:255',
+            'insurance_company' => 'nullable|string|max:255',
         ]);
 
         $equipment->update($request->all());

@@ -40,6 +40,12 @@
                             </select>
                         </div>
 
+                        <!-- DECEA -->
+                        <div class="mt-4">
+                        <x-input-label for="decea_profile_id" :value="__('ID DECEA / SARPAS (Para Pilotos)')" />
+                        <x-text-input id="decea_profile_id" class="block mt-1 w-full" type="text" name="decea_profile_id" :value="old('decea_profile_id', $user->decea_profile_id)" />
+                        </div>
+
                         <!-- Password -->
                         <div class="mt-4">
                             <x-input-label for="password" :value="__('Nova Senha (Opcional)')" />

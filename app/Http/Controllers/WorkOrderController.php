@@ -12,6 +12,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf; 
 
+// IMPORTS PARA NOTIFICAÇÃO
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use App\Mail\NewWorkOrderAssigned;
+use App\Mail\WorkOrderToPilot;
+
 class WorkOrderController extends Controller
 {
     // --- GESTÃO (BACKOFFICE) ---
@@ -19,13 +25,9 @@ class WorkOrderController extends Controller
     public function index(Request $request)
     {
         $query = WorkOrder::with(['client', 'technician', 'proposal']);
-        
-        // Filtro de Status
         if ($request->has('status') && $request->status != '') {
             $query->where('status', $request->status);
         }
-        
-        // Ordenação Inteligente: Pendentes no topo
         $workOrders = $query->orderByRaw("FIELD(status, 'pendente', 'em_execucao', 'agendada', 'concluida', 'cancelada')")
                             ->latest()
                             ->get();
@@ -33,7 +35,6 @@ class WorkOrderController extends Controller
         return view('work-orders.index', compact('workOrders'));
     }
 
-    // Visualizar (Read-Only)
     public function show(WorkOrder $workOrder)
     {
         $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'checklists.user']);
@@ -66,16 +67,24 @@ class WorkOrderController extends Controller
             'proposal_id' => null
         ]);
 
+        // --- NOTIFICAÇÃO: NOVA OS (Para o Gestor) ---
+        // Se foi criada manualmente e está pendente (sem técnico), avisa o Admin
+        try {
+            $gestores = User::where('role', 'admin')->get();
+            foreach ($gestores as $gestor) {
+                Mail::to($gestor->email)->send(new NewWorkOrderAssigned($os));
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Erro email nova OS: " . $e->getMessage());
+        }
+
         return redirect()->route('work-orders.edit', $os->id)->with('success', 'OS criada! Agora defina os checklists.');
     }
 
     public function edit(WorkOrder $workOrder)
     {
         $technicians = User::whereIn('role', ['admin', 'tecnico', 'comercial'])->get();
-        
-        // Carrega relacionamentos para a tela de edição
         $workOrder->load(['checklists.checklistModel', 'equipments']);
-        
         $availableModels = ChecklistModel::where('is_active', true)->get();
         $allEquipments = Equipment::all(); 
         
@@ -95,7 +104,9 @@ class WorkOrderController extends Controller
             'equipments.*' => 'exists:settings_equipment,id'
         ]);
 
-        // Auto-status update
+        // Guarda o técnico anterior para saber se mudou
+        $oldTechnicianId = $workOrder->technician_id;
+
         if ($workOrder->status === 'pendente' && $data['status'] === 'pendente') {
             $data['status'] = 'agendada';
         }
@@ -109,11 +120,34 @@ class WorkOrderController extends Controller
             'status' => $data['status'],
         ]);
 
-        // Sincroniza Equipamentos
         if (isset($data['equipments'])) {
             $workOrder->equipments()->sync($data['equipments']);
         } else {
             $workOrder->equipments()->detach();
+        }
+
+        // --- NOTIFICAÇÃO: ESCALAÇÃO DE PILOTO ---
+        // Se um técnico foi atribuído ou alterado
+        if ($workOrder->technician_id && $workOrder->technician_id != $oldTechnicianId) {
+            try {
+                $piloto = User::find($workOrder->technician_id);
+                if ($piloto) {
+                    // 1. Gera e salva o PDF temporariamente
+                    $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'proposal']);
+                    $pdf = Pdf::loadView('work-orders.pdf', compact('workOrder'));
+                    $pdf->setPaper('a4', 'portrait');
+                    
+                    // Salva na pasta public/temp
+                    $fileName = 'os-' . $workOrder->id . '.pdf';
+                    Storage::put('public/temp/' . $fileName, $pdf->output());
+                    $pdfPath = storage_path('app/public/temp/' . $fileName);
+
+                    // 2. Envia o e-mail com anexo
+                    Mail::to($piloto->email)->send(new WorkOrderToPilot($workOrder, $pdfPath));
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erro email piloto: " . $e->getMessage());
+            }
         }
 
         return redirect()->route('work-orders.index')->with('success', 'OS atualizada com sucesso!');
@@ -121,16 +155,12 @@ class WorkOrderController extends Controller
     
     public function destroy(WorkOrder $workOrder)
     {
-        // Segurança: Apenas Admin pode excluir
-        if (Auth::user()->role !== 'admin') {
-            abort(403, 'Apenas administradores podem excluir Ordens de Serviço.');
-        }
-
+        if (Auth::user()->role !== 'admin') abort(403, 'Apenas administradores podem excluir Ordens de Serviço.');
         $workOrder->delete();
         return redirect()->route('work-orders.index')->with('success', 'OS excluída.');
     }
 
-    // --- SPRINT 6: FRONTEND DO PILOTO (EXECUÇÃO) ---
+    // --- EXECUÇÃO (FRONTEND PILOTO) ---
 
     public function myServices()
     {
@@ -150,7 +180,6 @@ class WorkOrderController extends Controller
             abort(403, 'Você não é o técnico responsável por esta OS.');
         }
 
-        // Carregamento com SoftDeletes para histórico
         $workOrder->load([
             'client', 
             'equipments', 
@@ -167,18 +196,12 @@ class WorkOrderController extends Controller
     public function saveChecklist(Request $request, $checklistId)
     {
         $checklist = WorkOrderChecklist::findOrFail($checklistId);
-        
-        $request->validate([
-            'answers' => 'required|array',
-            'risk_level' => 'nullable|in:baixo,medio,alto',
-        ]);
+        $request->validate(['answers' => 'required|array', 'risk_level' => 'nullable|in:baixo,medio,alto']);
 
         foreach ($request->answers as $itemId => $data) {
-            $isOk = isset($data['ok']) && $data['ok'] == '1'; 
-            
             $checklist->answers()->create([
                 'checklist_item_id' => $itemId,
-                'is_ok' => $isOk,
+                'is_ok' => isset($data['ok']) && $data['ok'] == '1',
                 'observation' => $data['obs'] ?? null
             ]);
         }
@@ -198,53 +221,52 @@ class WorkOrderController extends Controller
         $status = $request->status; 
         
         if ($status === 'em_execucao') {
-            $pendingChecklists = $workOrder->checklists()->whereNull('filled_at')->count();
-            if ($pendingChecklists > 0) {
+            if ($workOrder->checklists()->whereNull('filled_at')->count() > 0) {
                 return redirect()->back()->with('error', 'Segurança: Preencha todos os checklists (ARO/Pré-Voo) ANTES de iniciar.');
             }
-
             $workOrder->update(['status' => 'em_execucao', 'started_at' => now()]);
             return redirect()->back()->with('success', 'Serviço INICIADO! Bom voo.');
         }
         
         if ($status === 'concluida') {
-            $pendingChecklists = $workOrder->checklists()->whereNull('filled_at')->count();
-            if ($pendingChecklists > 0) {
-                return redirect()->back()->with('error', 'Você precisa preencher todos os formulários obrigatórios antes de finalizar.');
+            if ($workOrder->checklists()->whereNull('filled_at')->count() > 0) {
+                return redirect()->back()->with('error', 'Checklists pendentes.');
             }
-
             $workOrder->update(['status' => 'concluida', 'finished_at' => now()]);
-            return redirect()->route('work-orders.myServices')->with('success', 'Serviço FINALIZADO com sucesso! Parabéns.');
+            return redirect()->route('work-orders.myServices')->with('success', 'Serviço FINALIZADO com sucesso!');
         }
 
         return redirect()->back();
     }
 
-    // --- GERAÇÃO DE PDF (ARO) ---
+    // --- GERAÇÃO DE PDF ---
+
+
+    // eri
 
     public function generateChecklistPdf($checklistId)
     {
         $checklist = WorkOrderChecklist::with([
-            'workOrder.client', 
-            'workOrder.technician', 
-            'workOrder.equipments', 
-            'checklistModel', 
-            'user',
-            'answers.checklistItem' => function($query) {
-                $query->withTrashed(); 
-            }
+            'workOrder.client', 'workOrder.technician', 'workOrder.equipments', 
+            'checklistModel', 'user',
+            'answers.checklistItem' => function($query) { $query->withTrashed(); }
         ])->findOrFail($checklistId);
 
-        if (!$checklist->filled_at) {
-            return redirect()->back()->with('error', 'Este checklist ainda não foi preenchido.');
-        }
+        if (!$checklist->filled_at) return redirect()->back()->with('error', 'Este checklist ainda não foi preenchido.');
 
         $pdf = Pdf::loadView('work-orders.aro-pdf', compact('checklist'));
         $pdf->setPaper('a4', 'portrait');
-
         return $pdf->stream('ARO_' . $checklist->workOrder->id . '.pdf');
     }
 
+    // NOVO: PDF da OS
+    public function generatePdf(WorkOrder $workOrder)
+    {
+        $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'proposal']);
+        $pdf = Pdf::loadView('work-orders.pdf', compact('workOrder'));
+        $pdf->setPaper('a4', 'portrait');
+        return $pdf->stream('OS_' . $workOrder->id . '.pdf');
+    }
 
     // --- GESTÃO DE VÍNCULOS ---
 
@@ -257,13 +279,13 @@ class WorkOrderController extends Controller
             'filled_at' => null,
             'user_id' => null
         ]);
-        return redirect()->back()->with('success', 'Checklist adicionado à OS.');
+        return redirect()->back()->with('success', 'Checklist adicionado.');
     }
 
     public function removeChecklist($checklistId)
     {
         $checklist = WorkOrderChecklist::findOrFail($checklistId);
-        if ($checklist->filled_at) return redirect()->back()->with('error', 'Checklist já preenchido não pode ser removido.');
+        if ($checklist->filled_at) return redirect()->back()->with('error', 'Não pode remover checklist já preenchido.');
         $checklist->delete();
         return redirect()->back()->with('success', 'Checklist removido.');
     }

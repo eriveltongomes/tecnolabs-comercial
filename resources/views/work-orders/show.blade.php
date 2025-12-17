@@ -5,7 +5,13 @@
                 {{ __('Detalhes da OS #') . $workOrder->id }}
             </h2>
             <div class="flex space-x-2">
-                @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'comercial'])) <a href="{{ route('work-orders.edit', $workOrder->id) }}" class="px-4 py-2 bg-yellow-500 text-white rounded-md font-bold text-xs uppercase hover:bg-yellow-600">
+                <a href="{{ route('work-orders.pdf', $workOrder->id) }}" target="_blank" class="px-4 py-2 bg-indigo-600 text-white rounded-md font-bold text-xs uppercase hover:bg-indigo-700 flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Baixar OS
+                </a>
+
+                @if(in_array(Auth::user()->role, ['admin', 'financeiro', 'comercial'])) 
+                    <a href="{{ route('work-orders.edit', $workOrder->id) }}" class="px-4 py-2 bg-yellow-500 text-white rounded-md font-bold text-xs uppercase hover:bg-yellow-600">
                         Editar / Agendar
                     </a>
                 @endif
@@ -39,22 +45,10 @@
                             <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Informações do Serviço</h3>
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <label class="text-xs text-gray-500 font-bold uppercase">Título</label>
-                                    <p class="text-lg">{{ $workOrder->title }}</p>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 font-bold uppercase">Cliente</label>
-                                    <p class="text-lg">{{ $workOrder->client->name }}</p>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 font-bold uppercase">Tipo</label>
-                                    <p class="text-gray-800">{{ ucfirst($workOrder->service_type) }}</p>
-                                </div>
-                                <div>
-                                    <label class="text-xs text-gray-500 font-bold uppercase">Local</label>
-                                    <p class="text-gray-800">{{ $workOrder->service_location }}</p>
-                                </div>
+                                <div><label class="text-xs text-gray-500 font-bold uppercase">Título</label><p class="text-lg">{{ $workOrder->title }}</p></div>
+                                <div><label class="text-xs text-gray-500 font-bold uppercase">Cliente</label><p class="text-lg">{{ $workOrder->client->name }}</p></div>
+                                <div><label class="text-xs text-gray-500 font-bold uppercase">Tipo</label><p class="text-gray-800">{{ ucfirst($workOrder->service_type) }}</p></div>
+                                <div><label class="text-xs text-gray-500 font-bold uppercase">Local</label><p class="text-gray-800">{{ $workOrder->service_location }}</p></div>
                             </div>
 
                             <div class="bg-gray-50 p-4 rounded mb-4">
@@ -66,8 +60,7 @@
                                 <div>
                                     <label class="text-xs text-gray-500 font-bold uppercase">Técnico Responsável</label>
                                     <div class="flex items-center mt-1">
-                                        <div class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                                        {{ $workOrder->technician->name ?? 'Não atribuído' }}
+                                        <div class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>{{ $workOrder->technician->name ?? 'Não atribuído' }}
                                     </div>
                                 </div>
                                 <div>
@@ -105,7 +98,6 @@
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                         <div class="p-6 text-gray-900">
                             <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Checklists / ARO</h3>
-                            
                             <ul class="space-y-3">
                                 @forelse($workOrder->checklists as $checklist)
                                     <li class="border rounded p-3 {{ $checklist->filled_at ? 'bg-green-50 border-green-200' : 'bg-gray-50' }}">
@@ -147,14 +139,11 @@
                             <h3 class="font-bold text-sm mb-2 text-red-700">Zona de Perigo</h3>
                             <form action="{{ route('work-orders.destroy', $workOrder->id) }}" method="POST" onsubmit="return confirm('Tem certeza absoluta? Isso apagará todo o histórico desta OS, incluindo checklists preenchidos.');">
                                 @csrf @method('DELETE')
-                                <button class="w-full py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700">
-                                    Excluir Ordem de Serviço
-                                </button>
+                                <button class="w-full py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700">Excluir Ordem de Serviço</button>
                             </form>
                         </div>
                     </div>
                     @endif
-
                 </div>
             </div>
         </div>

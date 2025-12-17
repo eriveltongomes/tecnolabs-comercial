@@ -47,7 +47,6 @@ Route::middleware('auth')->group(function () {
         // RELATÓRIOS OPERACIONAIS
         Route::get('/operational-equipment', [ReportController::class, 'operationalEquipment'])->name('operationalEquipment');
         Route::get('/operational-productivity', [ReportController::class, 'operationalProductivity'])->name('operationalProductivity');
-        // NOVO
         Route::get('/operational-status', [ReportController::class, 'operationalStatus'])->name('operationalStatus');
     });
     
@@ -81,7 +80,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/my-services', [WorkOrderController::class, 'myServices'])->name('work-orders.myServices');
         Route::get('/work-orders/{workOrder}/execute', [WorkOrderController::class, 'execute'])->name('work-orders.execute');
         Route::post('/work-orders/checklist/{checklist}/save', [WorkOrderController::class, 'saveChecklist'])->name('work-orders.saveChecklist');
+        
+        // PDFs
         Route::get('/work-orders/checklist/{checklist}/pdf', [WorkOrderController::class, 'generateChecklistPdf'])->name('work-orders.checklistPdf');
+        Route::get('/work-orders/{workOrder}/pdf', [WorkOrderController::class, 'generatePdf'])->name('work-orders.pdf'); // Rota Nova
+
         Route::patch('/work-orders/{workOrder}/status', [WorkOrderController::class, 'updateStatus'])->name('work-orders.updateStatus');
         Route::post('/work-orders/{workOrder}/checklist', [WorkOrderController::class, 'addChecklist'])->name('work-orders.addChecklist');
         Route::delete('/work-orders/checklist/{checklist}', [WorkOrderController::class, 'removeChecklist'])->name('work-orders.removeChecklist');

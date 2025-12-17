@@ -4,17 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Proposal;
 use App\Models\Client;
-use App\Models\WorkOrder; // <--- NOVO IMPORT
+use App\Models\WorkOrder;
 use App\Models\Settings\Channel;
 use App\Models\Settings\CommissionRule;
 use App\Models\Settings\Equipment;
 use App\Models\Settings\Course;
 use App\Models\Settings\FixedCost;
 use App\Models\Settings\Tax;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+
+// IMPORTS PARA NOTIFICAÇÃO
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ProposalAwaitingApproval;
+use App\Mail\NewWorkOrderAssigned; 
 
 class ProposalController extends Controller
 {
@@ -72,7 +78,6 @@ class ProposalController extends Controller
 
         $proposal = new Proposal();
         
-        // Lógica de Numeração
         $year = date('Y');
         $lastProposal = Proposal::where('proposal_number', 'like', $year . '-%')
                                 ->orderBy('id', 'desc')
@@ -197,6 +202,8 @@ class ProposalController extends Controller
         if(isset($cleanDetails['monthly_cost'])) $cleanDetails['monthly_cost'] = $this->parseMoney($cleanDetails['monthly_cost']);
         if(isset($cleanDetails['installation_cost'])) $cleanDetails['installation_cost'] = $this->parseMoney($cleanDetails['installation_cost']);
 
+        $oldStatus = $proposal->status;
+
         $proposal->client_id = $data['client_id'];
         $proposal->channel_id = $data['channel_id'];
         $proposal->service_type = $data['service_type'];
@@ -222,6 +229,21 @@ class ProposalController extends Controller
                 $numericVal = $this->parseMoney($val);
                 if ($numericVal > 0) {
                     $proposal->variableCosts()->create(['description' => $desc, 'cost' => $numericVal]);
+                }
+            }
+        }
+
+        // --- NOTIFICAÇÃO: ENVIAR PARA FINANCEIRO ---
+        if ($proposal->status == 'em_analise' && $oldStatus != 'em_analise') {
+            $proposal->refresh(); 
+            $formattedValue = number_format($proposal->total_value, 2, ',', '.');
+
+            $financeiros = User::whereIn('role', ['financeiro', 'admin'])->get();
+            foreach ($financeiros as $user) {
+                try {
+                    Mail::to($user->email)->send(new ProposalAwaitingApproval($proposal, $formattedValue));
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error("Erro envio email proposta: " . $e->getMessage());
                 }
             }
         }
@@ -300,9 +322,24 @@ class ProposalController extends Controller
 
     public function sendToAnalysis(Proposal $proposal) { 
         $this->authorizeEdit($proposal); 
+        
         $proposal->update(['status' => 'em_analise']); 
+        $proposal->refresh();
+        
         if (function_exists('activity')) activity()->performedOn($proposal)->log('Enviou para análise');
-        return redirect()->route('proposals.index')->with('success', 'Enviada para análise!'); 
+
+        // --- NOTIFICAÇÃO ---
+        $formattedValue = number_format($proposal->total_value, 2, ',', '.');
+        $financeiros = User::whereIn('role', ['financeiro', 'admin'])->get();
+        foreach ($financeiros as $user) {
+            try {
+                Mail::to($user->email)->send(new ProposalAwaitingApproval($proposal, $formattedValue));
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erro email: " . $e->getMessage());
+            }
+        }
+
+        return redirect()->route('proposals.index')->with('success', 'Enviada para análise e financeiro notificado!'); 
     }
 
     public function cancel(Proposal $proposal) { 
@@ -339,22 +376,32 @@ class ProposalController extends Controller
         ]);
         
         // 2. Operacional: Automação - Criar OS (WorkOrder)
-        // Verifica se já existe para não duplicar
         if (!WorkOrder::where('proposal_id', $proposal->id)->exists()) {
-            WorkOrder::create([
+            $os = WorkOrder::create([
                 'proposal_id' => $proposal->id,
                 'client_id' => $proposal->client_id,
                 'title' => 'OS #' . $proposal->proposal_number . ' - ' . ucfirst($proposal->service_type),
-                'description' => $proposal->scope_description, // Copia o escopo
+                'description' => $proposal->scope_description, 
                 'service_type' => $proposal->service_type,
                 'service_location' => $proposal->service_location,
-                'scheduled_at' => $proposal->service_date, // Sugestão inicial de data
+                'scheduled_at' => $proposal->service_date, 
                 'status' => 'pendente'
             ]);
+
+            try {
+                $gestores = User::where('role', 'admin')->get();
+                foreach ($gestores as $gestor) {
+                    Mail::to($gestor->email)->send(new NewWorkOrderAssigned($os));
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erro ao notificar gestor sobre nova OS automática: " . $e->getMessage());
+            }
         }
         
         if (function_exists('activity')) activity()->performedOn($proposal)->log('Aprovou (Gerou OS e Comissão)');
-        return redirect()->back()->with('success', 'Proposta APROVADA e Ordem de Serviço gerada!');
+        
+        // CORREÇÃO: Redireciona explicitamente para a lista de propostas
+        return redirect()->route('proposals.index')->with('success', 'Proposta APROVADA e Ordem de Serviço gerada!');
     }
 
     public function reject(Request $request, Proposal $proposal) {
@@ -419,7 +466,6 @@ class ProposalController extends Controller
         $user = Auth::user(); 
         if ($user->role === 'admin') return; 
         if ($user->role === 'comercial' && $proposal->user_id !== $user->id) abort(403); 
-        // Bloqueia edição se finalizada
         if (in_array($proposal->status, ['aprovada', 'cancelada', 'recusada'])) { 
             if ($user->role === 'comercial') abort(403, 'Proposta finalizada.'); 
         } 

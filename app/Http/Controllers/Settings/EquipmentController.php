@@ -21,18 +21,18 @@ class EquipmentController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
+            'type' => 'required|in:drone,camera,acessorio,outros',
             'name' => 'required|string|max:255',
-            'invested_value' => 'required|numeric|min:0',
+            'invested_value' => 'required|numeric|min:0', // <--- CORRIGIDO
             'lifespan_hours' => 'required|integer|min:1',
-            // NOVOS CAMPOS
             'anac_registration' => 'nullable|string|max:255',
             'insurance_policy' => 'nullable|string|max:255',
             'insurance_company' => 'nullable|string|max:255',
+            'insurance_expiry' => 'nullable|date',
         ]);
 
-        Equipment::create($request->all());
-
+        Equipment::create($data);
         return redirect()->route('settings.equipment.index')->with('success', 'Equipamento cadastrado com sucesso.');
     }
 
@@ -43,24 +43,24 @@ class EquipmentController extends Controller
 
     public function update(Request $request, Equipment $equipment)
     {
-        $request->validate([
+        $data = $request->validate([
+            'type' => 'required|in:drone,camera,acessorio,outros',
             'name' => 'required|string|max:255',
-            'invested_value' => 'required|numeric|min:0',
+            'invested_value' => 'required|numeric|min:0', 
             'lifespan_hours' => 'required|integer|min:1',
-            // NOVOS CAMPOS
             'anac_registration' => 'nullable|string|max:255',
             'insurance_policy' => 'nullable|string|max:255',
             'insurance_company' => 'nullable|string|max:255',
+            'insurance_expiry' => 'nullable|date',
         ]);
 
-        $equipment->update($request->all());
-
-        return redirect()->route('settings.equipment.index')->with('success', 'Equipamento atualizado com sucesso.');
+        $equipment->update($data);
+        return redirect()->route('settings.equipment.index')->with('success', 'Equipamento atualizado.');
     }
 
     public function destroy(Equipment $equipment)
     {
         $equipment->delete();
-        return redirect()->route('settings.equipment.index')->with('success', 'Equipamento excluído com sucesso.');
+        return redirect()->route('settings.equipment.index')->with('success', 'Equipamento excluído.');
     }
 }

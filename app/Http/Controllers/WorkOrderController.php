@@ -12,7 +12,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf; 
 
-// IMPORTS PARA NOTIFICAÇÃO
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use App\Mail\NewWorkOrderAssigned;
@@ -25,9 +24,16 @@ class WorkOrderController extends Controller
     public function index(Request $request)
     {
         $query = WorkOrder::with(['client', 'technician', 'proposal']);
+        
+        $user = Auth::user();
+        if ($user->role === 'tecnico') {
+            $query->where('technician_id', $user->id);
+        }
+
         if ($request->has('status') && $request->status != '') {
             $query->where('status', $request->status);
         }
+
         $workOrders = $query->orderByRaw("FIELD(status, 'pendente', 'em_execucao', 'agendada', 'concluida', 'cancelada')")
                             ->latest()
                             ->get();
@@ -37,6 +43,7 @@ class WorkOrderController extends Controller
 
     public function show(WorkOrder $workOrder)
     {
+        $this->authorizeView($workOrder);
         $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'checklists.user']);
         return view('work-orders.show', compact('workOrder'));
     }
@@ -44,7 +51,8 @@ class WorkOrderController extends Controller
     public function create()
     {
         $clients = Client::all();
-        return view('work-orders.create', compact('clients'));
+        $technicians = User::whereIn('role', ['tecnico', 'admin'])->get();
+        return view('work-orders.create', compact('clients', 'technicians'));
     }
 
     public function store(Request $request)
@@ -55,27 +63,33 @@ class WorkOrderController extends Controller
             'service_type' => 'required|in:drone,timelapse,tour_virtual,manutencao,teste,outros',
             'description' => 'nullable|string',
             'service_location' => 'required|string|max:255',
+            'scheduled_at' => 'required|date',
+            'technician_id' => 'nullable|exists:users,id',
         ]);
+
+        $status = $data['technician_id'] ? 'agendada' : 'pendente';
 
         $os = WorkOrder::create([
             'client_id' => $data['client_id'],
+            'technician_id' => $data['technician_id'],
             'title' => $data['title'],
             'service_type' => $data['service_type'],
-            'description' => $data['description'],
+            'description' => $data['description'] ?? null,
             'service_location' => $data['service_location'],
-            'status' => 'pendente',
+            'scheduled_at' => $data['scheduled_at'],
+            'status' => $status,
             'proposal_id' => null
         ]);
 
-        // --- NOTIFICAÇÃO: NOVA OS (Para o Gestor) ---
-        // Se foi criada manualmente e está pendente (sem técnico), avisa o Admin
-        try {
-            $gestores = User::where('role', 'admin')->get();
-            foreach ($gestores as $gestor) {
-                Mail::to($gestor->email)->send(new NewWorkOrderAssigned($os));
+        if (!$os->technician_id) {
+            try {
+                $gestores = User::where('role', 'admin')->get();
+                foreach ($gestores as $gestor) {
+                    Mail::to($gestor->email)->send(new NewWorkOrderAssigned($os));
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erro email nova OS: " . $e->getMessage());
             }
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Erro email nova OS: " . $e->getMessage());
         }
 
         return redirect()->route('work-orders.edit', $os->id)->with('success', 'OS criada! Agora defina os checklists.');
@@ -83,9 +97,12 @@ class WorkOrderController extends Controller
 
     public function edit(WorkOrder $workOrder)
     {
+        $this->authorizeEdit($workOrder);
+
         $technicians = User::whereIn('role', ['admin', 'tecnico', 'comercial'])->get();
         $workOrder->load(['checklists.checklistModel', 'equipments']);
         $availableModels = ChecklistModel::where('is_active', true)->get();
+        
         $allEquipments = Equipment::all(); 
         
         return view('work-orders.edit', compact('workOrder', 'technicians', 'availableModels', 'allEquipments'));
@@ -93,9 +110,14 @@ class WorkOrderController extends Controller
 
     public function update(Request $request, WorkOrder $workOrder)
     {
+        $this->authorizeEdit($workOrder);
+
         $data = $request->validate([
             'technician_id' => 'required|exists:users,id',
             'scheduled_at' => 'required|date',
+            'started_at' => 'nullable|date', 
+            'finished_at' => 'nullable|date|after:started_at',
+            
             'decea_protocol' => 'nullable|string|max:255',
             'flight_max_altitude' => 'nullable|integer',
             'description' => 'nullable|string', 
@@ -104,19 +126,21 @@ class WorkOrderController extends Controller
             'equipments.*' => 'exists:settings_equipment,id'
         ]);
 
-        // Guarda o técnico anterior para saber se mudou
         $oldTechnicianId = $workOrder->technician_id;
 
-        if ($workOrder->status === 'pendente' && $data['status'] === 'pendente') {
+        if ($workOrder->status === 'pendente' && $data['status'] === 'pendente' && $data['technician_id']) {
             $data['status'] = 'agendada';
         }
 
+        // CORREÇÃO: Usamos o operador '?? null' para evitar erro se o campo vier vazio
         $workOrder->update([
             'technician_id' => $data['technician_id'],
             'scheduled_at' => $data['scheduled_at'],
-            'decea_protocol' => $data['decea_protocol'],
-            'flight_max_altitude' => $data['flight_max_altitude'],
-            'description' => $data['description'],
+            'started_at' => $data['started_at'] ?? $workOrder->started_at,
+            'finished_at' => $data['finished_at'] ?? $workOrder->finished_at,
+            'decea_protocol' => $data['decea_protocol'] ?? null,        // <--- Corrigido
+            'flight_max_altitude' => $data['flight_max_altitude'] ?? null, // <--- Corrigido
+            'description' => $data['description'] ?? null,               // <--- Corrigido
             'status' => $data['status'],
         ]);
 
@@ -126,23 +150,18 @@ class WorkOrderController extends Controller
             $workOrder->equipments()->detach();
         }
 
-        // --- NOTIFICAÇÃO: ESCALAÇÃO DE PILOTO ---
-        // Se um técnico foi atribuído ou alterado
         if ($workOrder->technician_id && $workOrder->technician_id != $oldTechnicianId) {
             try {
                 $piloto = User::find($workOrder->technician_id);
                 if ($piloto) {
-                    // 1. Gera e salva o PDF temporariamente
                     $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'proposal']);
                     $pdf = Pdf::loadView('work-orders.pdf', compact('workOrder'));
                     $pdf->setPaper('a4', 'portrait');
                     
-                    // Salva na pasta public/temp
                     $fileName = 'os-' . $workOrder->id . '.pdf';
                     Storage::put('public/temp/' . $fileName, $pdf->output());
                     $pdfPath = storage_path('app/public/temp/' . $fileName);
 
-                    // 2. Envia o e-mail com anexo
                     Mail::to($piloto->email)->send(new WorkOrderToPilot($workOrder, $pdfPath));
                 }
             } catch (\Exception $e) {
@@ -241,9 +260,6 @@ class WorkOrderController extends Controller
 
     // --- GERAÇÃO DE PDF ---
 
-
-    // eri
-
     public function generateChecklistPdf($checklistId)
     {
         $checklist = WorkOrderChecklist::with([
@@ -259,9 +275,9 @@ class WorkOrderController extends Controller
         return $pdf->stream('ARO_' . $checklist->workOrder->id . '.pdf');
     }
 
-    // NOVO: PDF da OS
     public function generatePdf(WorkOrder $workOrder)
     {
+        $this->authorizeView($workOrder);
         $workOrder->load(['client', 'technician', 'equipments', 'checklists.checklistModel', 'proposal']);
         $pdf = Pdf::loadView('work-orders.pdf', compact('workOrder'));
         $pdf->setPaper('a4', 'portrait');
@@ -288,5 +304,17 @@ class WorkOrderController extends Controller
         if ($checklist->filled_at) return redirect()->back()->with('error', 'Não pode remover checklist já preenchido.');
         $checklist->delete();
         return redirect()->back()->with('success', 'Checklist removido.');
+    }
+
+    private function authorizeView(WorkOrder $workOrder) {
+        $user = Auth::user();
+        if (in_array($user->role, ['admin', 'financeiro'])) return;
+        if ($user->role === 'tecnico' && $workOrder->technician_id === $user->id) return;
+        abort(403);
+    }
+
+    private function authorizeEdit(WorkOrder $workOrder) {
+        $user = Auth::user();
+        if ($user->role !== 'admin') abort(403);
     }
 }

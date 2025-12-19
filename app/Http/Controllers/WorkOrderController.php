@@ -50,13 +50,17 @@ class WorkOrderController extends Controller
 
     public function create()
     {
-        $clients = Client::all();
+        // Carrega clientes ordenados por nome para facilitar a busca
+        $clients = Client::orderBy('name')->get();
+        // Carrega técnicos e admins que podem executar serviços
         $technicians = User::whereIn('role', ['tecnico', 'admin'])->get();
+        
         return view('work-orders.create', compact('clients', 'technicians'));
     }
 
     public function store(Request $request)
     {
+        // 1. Validação
         $data = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'title' => 'required|string|max:255',
@@ -67,11 +71,18 @@ class WorkOrderController extends Controller
             'technician_id' => 'nullable|exists:users,id',
         ]);
 
-        $status = $data['technician_id'] ? 'agendada' : 'pendente';
+        // 2. Tratamento Seguro do Técnico (Correção do erro "Undefined array key")
+        // Se o campo não vier no request, assume null
+        $technicianId = $data['technician_id'] ?? null;
 
+        // Define status inicial
+        $status = $technicianId ? 'agendada' : 'pendente';
+
+        // 3. Criação da OS
         $os = WorkOrder::create([
             'client_id' => $data['client_id'],
-            'technician_id' => $data['technician_id'],
+            'technician_id' => $technicianId,
+            'user_id' => Auth::id(), // Quem registrou a OS
             'title' => $data['title'],
             'service_type' => $data['service_type'],
             'description' => $data['description'] ?? null,
@@ -81,6 +92,7 @@ class WorkOrderController extends Controller
             'proposal_id' => null
         ]);
 
+        // 4. Notificação (Se não tiver técnico, avisa os admins)
         if (!$os->technician_id) {
             try {
                 $gestores = User::where('role', 'admin')->get();
@@ -132,15 +144,14 @@ class WorkOrderController extends Controller
             $data['status'] = 'agendada';
         }
 
-        // CORREÇÃO: Usamos o operador '?? null' para evitar erro se o campo vier vazio
         $workOrder->update([
             'technician_id' => $data['technician_id'],
             'scheduled_at' => $data['scheduled_at'],
             'started_at' => $data['started_at'] ?? $workOrder->started_at,
             'finished_at' => $data['finished_at'] ?? $workOrder->finished_at,
-            'decea_protocol' => $data['decea_protocol'] ?? null,        // <--- Corrigido
-            'flight_max_altitude' => $data['flight_max_altitude'] ?? null, // <--- Corrigido
-            'description' => $data['description'] ?? null,               // <--- Corrigido
+            'decea_protocol' => $data['decea_protocol'] ?? null,
+            'flight_max_altitude' => $data['flight_max_altitude'] ?? null,
+            'description' => $data['description'] ?? null,
             'status' => $data['status'],
         ]);
 

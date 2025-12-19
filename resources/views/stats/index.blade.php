@@ -13,7 +13,7 @@
 
             <div class="mb-6">
                 <h3 class="text-3xl font-bold text-gray-800">Boas-vindas, {{ Auth::user()->name }}!</h3>
-                <p class="text-lg text-gray-500">Aqui está o seu resumo de performance deste mês ({{ now()->translatedFormat('F') }}).</p>
+                <p class="text-lg text-gray-500">Aqui está o seu resumo de performance deste mês ({{ now()->locale('pt_BR')->translatedFormat('F') }}).</p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

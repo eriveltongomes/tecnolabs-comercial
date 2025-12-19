@@ -4,6 +4,7 @@ namespace App\Models\Settings;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\RevenueTier;
 
 class CommissionRule extends Model
 {

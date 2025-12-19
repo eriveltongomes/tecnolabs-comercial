@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Proposal;
-use App\Models\Settings\RevenueTier;
+use App\Models\RevenueTier;
 use App\Models\Settings\Channel; // <-- IMPORTAR CANAIS
 use App\Models\Settings\CommissionRule; // <-- IMPORTAR REGRAS
 use Illuminate\Support\Facades\Auth;

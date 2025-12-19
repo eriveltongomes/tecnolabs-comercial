@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
+use Illuminate\Support\Facades\Storage; // <--- Importante para deletar fotos antigas
 
 class UserController extends Controller
 {
@@ -25,21 +26,27 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => ['required', 'in:admin,financeiro,comercial,tecnico'],
-            'decea_profile_id' => ['nullable', 'string', 'max:50'], // NOVO
+            'profile_photo' => ['nullable', 'image', 'max:2048'], // Validação da foto
         ]);
 
-        User::create([
+        $data = [
             'name' => $request->name,
             'email' => $request->email,
-            'password' => $request->password, // O Mutator do Model faz o Hash
+            'password' => Hash::make($request->password),
             'role' => $request->role,
-            'decea_profile_id' => $request->decea_profile_id, // NOVO
-        ]);
+        ];
 
-        return redirect()->route('admin.users.index')->with('success', 'Usuário criado com sucesso.');
+        // Upload da Foto na Criação
+        if ($request->hasFile('profile_photo')) {
+            $data['profile_photo'] = $request->file('profile_photo')->store('profile-photos', 'public');
+        }
+
+        User::create($data);
+
+        return redirect()->route('admin.users.index')->with('success', 'Usuário criado com sucesso!');
     }
 
     public function edit(User $user)
@@ -51,32 +58,47 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class.',email,'.$user->id],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
             'role' => ['required', 'in:admin,financeiro,comercial,tecnico'],
-            'decea_profile_id' => ['nullable', 'string', 'max:50'], // NOVO
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'profile_photo' => ['nullable', 'image', 'max:2048'], // Validação da foto
         ]);
 
-        $data = $request->only('name', 'email', 'role', 'decea_profile_id');
+        $data = [
+            'name' => $request->name,
+            'email' => $request->email,
+            'role' => $request->role,
+        ];
 
         if ($request->filled('password')) {
-            // Aqui precisamos fazer o hash manual ou confiar no mutator se setar a propriedade
-            $user->password = $request->password; 
+            $request->validate([
+                'password' => ['confirmed', Rules\Password::defaults()],
+            ]);
+            $data['password'] = Hash::make($request->password);
         }
-        
-        // Update seguro
-        $user->name = $data['name'];
-        $user->email = $data['email'];
-        $user->role = $data['role'];
-        $user->decea_profile_id = $data['decea_profile_id'];
-        $user->save();
 
-        return redirect()->route('admin.users.index')->with('success', 'Usuário atualizado com sucesso.');
+        // --- LÓGICA DE UPLOAD DE FOTO (ADMIN) ---
+        if ($request->hasFile('profile_photo')) {
+            // 1. Deleta a antiga se existir
+            if ($user->profile_photo) {
+                Storage::disk('public')->delete($user->profile_photo);
+            }
+            // 2. Salva a nova
+            $data['profile_photo'] = $request->file('profile_photo')->store('profile-photos', 'public');
+        }
+        // ----------------------------------------
+
+        $user->update($data);
+
+        return redirect()->route('admin.users.index')->with('success', 'Usuário atualizado com sucesso!');
     }
 
     public function destroy(User $user)
     {
-        if ($user->id === auth()->id()) return redirect()->route('admin.users.index')->with('error', 'Erro.');
+        // Deleta a foto ao remover o usuário para não deixar lixo no servidor
+        if ($user->profile_photo) {
+            Storage::disk('public')->delete($user->profile_photo);
+        }
+        
         $user->delete();
         return redirect()->route('admin.users.index')->with('success', 'Usuário excluído.');
     }

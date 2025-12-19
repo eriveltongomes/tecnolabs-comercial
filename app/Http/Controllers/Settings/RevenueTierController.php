@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use App\Models\Settings\RevenueTier;
+use App\Models\RevenueTier;
 use Illuminate\Http\Request;
 
 class RevenueTierController extends Controller

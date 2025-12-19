@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\Proposal;
 use App\Models\User;
 use App\Models\Settings\Equipment;
-use App\Models\WorkOrder; // <--- NOVO IMPORT
+use App\Models\WorkOrder;
+use App\Models\RevenueTier;
+use App\Models\MonthlyGoal;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -281,19 +283,13 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * RELATÓRIO 3: MAPA DE STATUS (GARGALOS)
-     * Mostra o funil operacional e onde as OSs estão paradas.
-     */
     public function operationalStatus()
     {
-        // Conta quantas OSs tem em cada status
         $stats = WorkOrder::selectRaw('status, count(*) as count')
             ->groupBy('status')
             ->pluck('count', 'status')
             ->toArray();
 
-        // Garante que todos os status existam (mesmo zerados)
         $allStatuses = ['pendente', 'agendada', 'em_execucao', 'concluida', 'cancelada'];
         $data = [];
         $total = 0;
@@ -304,12 +300,200 @@ class ReportController extends Controller
             $total += $count;
         }
 
-        // Calcula porcentagens
         $percentages = [];
         foreach ($data as $status => $count) {
             $percentages[$status] = $total > 0 ? round(($count / $total) * 100, 1) : 0;
         }
 
         return view('reports.operational-status', compact('data', 'total', 'percentages'));
+    }
+
+    // --- RANKING DE EQUIPE (Atualizado com UX/UI e Metas) ---
+
+    public function teamRanking(Request $request)
+    {
+        // 1. Datas
+        $startDate = $request->query('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->query('end_date', now()->endOfMonth()->format('Y-m-d'));
+
+        // Verifica se o período já encerrou
+        $isPeriodClosed = Carbon::parse($endDate)->endOfDay()->isPast();
+        
+        // Dias corridos para projeção
+        $endCarbon = Carbon::parse($endDate);
+        $startCarbon = Carbon::parse($startDate);
+        $daysInPeriod = $startCarbon->diffInDays($endCarbon) + 1;
+        $daysPassed = $isPeriodClosed ? $daysInPeriod : max(1, now()->diffInDays($startCarbon) + 1);
+
+        // 2. METAS E CAPACIDADE
+    
+        // A. Meta Global da Empresa (Busca pelo mês da data final do filtro)
+        $metaEmpresa = MonthlyGoal::where('month', $endCarbon->month)
+                                ->where('year', $endCarbon->year)
+                                ->value('amount');
+        $metaEmpresa = floatval($metaEmpresa ?? 0);
+
+        // B. Capacidade da Equipe (Teto Individual x Nº Vendedores Ativos)
+        $vendedoresCount = User::whereIn('role', ['admin', 'comercial', 'tecnico'])->count();
+        $tetoIndividual = RevenueTier::max('max_value') ?? 0;
+        $capacidadeEquipe = $tetoIndividual * $vendedoresCount;
+
+        // Meta de Referência para o Header (Empresa ganha prioridade se existir)
+        $metaReferencia = $metaEmpresa > 0 ? $metaEmpresa : $capacidadeEquipe;
+
+        // C. Traz todas as faixas de meta para identificar o "Nível" do vendedor
+        $allTiers = RevenueTier::orderBy('min_value', 'asc')->get();
+
+
+        // 3. Busca Vendedores (Com todas as métricas)
+        $sellers = User::whereIn('role', ['admin', 'comercial', 'tecnico'])
+            ->withSum(['proposals as total_vendido' => function($q) use ($startDate, $endDate) {
+                $q->where('status', 'aprovada')
+                  ->whereBetween('approved_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            }], 'total_value')
+            ->withCount(['proposals as qtd_vendas' => function($q) use ($startDate, $endDate) {
+                $q->where('status', 'aprovada')
+                  ->whereBetween('approved_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            }])
+            ->withCount(['proposals as qtd_criadas' => function($q) use ($startDate, $endDate) {
+                $q->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            }])
+            ->withSum(['proposals as total_pipeline' => function($q) {
+                $q->where('status', 'em_analise'); 
+            }], 'total_value')
+            ->with(['proposals' => function($q) use ($startDate, $endDate) {
+                $q->where('status', 'aprovada')
+                  ->whereBetween('approved_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                  ->select('user_id', 'total_value', 'approved_at');
+            }])
+            ->get()
+            ->sortByDesc('total_vendido');
+
+        // Calcula porcentagem total da empresa para a barra de progresso global (Nova Feature UX)
+        $totalVendidoEmpresa = $sellers->sum('total_vendido');
+        $porcentagemEmpresa = $metaReferencia > 0 ? ($totalVendidoEmpresa / $metaReferencia) * 100 : 0;
+
+        // 4. Prepara os dados individuais
+        $categories = []; 
+        $period = \Carbon\CarbonPeriod::create($startDate, $endDate);
+        foreach ($period as $date) {
+            $categories[] = $date->format('d/m');
+        }
+
+        $ranking = $sellers->map(function($seller) use ($tetoIndividual, $categories, $isPeriodClosed, $daysPassed, $daysInPeriod, $allTiers) {
+            $totalVendido = $seller->total_vendido ?? 0;
+            $qtdVendas = $seller->qtd_vendas ?? 0;
+            $qtdCriadas = $seller->qtd_criadas ?? 0;
+            $pipeline = $seller->total_pipeline ?? 0;
+            
+            // --- Lógica do Nível/Meta Atual (UX) ---
+            // Encontra em qual tier o valor vendido se encaixa
+            $tierAtual = $allTiers->first(function($tier) use ($totalVendido) {
+                return $totalVendido >= $tier->min_value && $totalVendido <= $tier->max_value;
+            });
+            
+            // Se passou do máximo, pega o último tier
+            if (!$tierAtual && $totalVendido > $allTiers->max('max_value')) {
+                $tierAtual = $allTiers->last();
+            }
+
+            // Define o nome da meta (ex: Meta 1, Ouro, etc)
+            $nomeMetaAtual = $tierAtual ? $tierAtual->name : 'Iniciando';
+            // ----------------------------------
+
+            // Cálculos Financeiros
+            $metaIndividual = floatval($tetoIndividual);
+            $porcentagem = $metaIndividual > 0 ? ($totalVendido / $metaIndividual) * 100 : 0;
+            
+            $porcentagemVisual = $porcentagem > 100 ? 100 : $porcentagem;
+            $ticketMedio = $qtdVendas > 0 ? $totalVendido / $qtdVendas : 0;
+            $taxaConversao = $qtdCriadas > 0 ? ($qtdVendas / $qtdCriadas) * 100 : 0;
+            
+            // Projeção
+            $projecao = 0;
+            if (!$isPeriodClosed && $daysPassed > 0 && $totalVendido > 0) {
+                $mediaDiaria = $totalVendido / $daysPassed;
+                $projecao = $mediaDiaria * $daysInPeriod;
+            } else {
+                $projecao = $totalVendido; 
+            }
+
+            // Status e Badges
+            $restante = $metaIndividual - $totalVendido;
+            $atingiuMeta = $totalVendido >= $metaIndividual;
+            
+            $statusLabel = '🏃 Em Busca';
+            $statusColor = 'bg-blue-50 text-blue-700 border-blue-200'; 
+
+            if ($atingiuMeta) {
+                $statusLabel = '🏆 Batida!';
+                $statusColor = 'bg-green-100 text-green-700 border-green-200';
+            } elseif ($isPeriodClosed) {
+                $statusLabel = '❌ Não Batida';
+                $statusColor = 'bg-red-100 text-red-700 border-red-200';
+            }
+
+            // Gráfico Sparkline
+            $dailySales = [];
+            $proposals = $seller->proposals->groupBy(function($val) {
+                return \Carbon\Carbon::parse($val->approved_at)->format('d/m');
+            });
+            foreach ($categories as $day) {
+                $dailySales[] = $proposals->has($day) ? $proposals->get($day)->sum('total_value') : 0;
+            }
+
+            // Avatar (CORREÇÃO DE FOTO: Dupla verificação)
+            $photoUrl = null;
+            
+            // 1. Tenta o nome personalizado (se houver)
+            if (!empty($seller->profile_photo)) { 
+                 $photoUrl = asset('storage/' . $seller->profile_photo);
+            } 
+            // 2. Tenta o nome padrão do Laravel (Jetstream/Fortify)
+            elseif (!empty($seller->profile_photo_path)) {
+                 $photoUrl = asset('storage/' . $seller->profile_photo_path);
+            }
+
+            $iniciais = collect(explode(' ', $seller->name))->map(fn($n) => strtoupper(substr($n, 0, 1)))->take(2)->implode('');
+
+            return (object) [
+                'name' => $seller->name,
+                'avatar_initials' => $iniciais,
+                'photo_url' => $photoUrl,
+                'nome_meta' => $nomeMetaAtual,
+                'total' => $totalVendido,
+                'pipeline' => $pipeline,
+                'ticket_medio' => $ticketMedio,
+                'conversao' => $taxaConversao,
+                'projecao' => $projecao,
+                'meta' => $metaIndividual,
+                'porcentagem' => number_format($porcentagem, 1),
+                'porcentagem_visual' => $porcentagemVisual,
+                'falta' => $restante > 0 ? $restante : 0,
+                'atingiu_meta' => $atingiuMeta,
+                'zerado' => $totalVendido == 0,
+                'daily_data' => $dailySales,
+                'status_label' => $statusLabel,
+                'status_color' => $statusColor
+            ];
+        });
+
+        $topSellersChart = $ranking->take(5)->values();
+
+        return view('reports.team-ranking', [
+            'ranking' => $ranking,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+            
+            // Variáveis de Meta e Capacidade
+            'metaReferencia' => $metaReferencia, 
+            'metaEmpresa' => $metaEmpresa, 
+            'capacidadeEquipe' => $capacidadeEquipe,
+            'porcentagemEmpresa' => $porcentagemEmpresa, 
+            
+            'chartCategories' => $categories,
+            'topSellersChart' => $topSellersChart,
+            'isPeriodClosed' => $isPeriodClosed
+        ]);
     }
 }

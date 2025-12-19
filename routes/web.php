@@ -18,6 +18,7 @@ use App\Http\Controllers\Settings\RevenueTierController;
 use App\Http\Controllers\Settings\CommissionRuleController;
 use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\ChecklistModelController;
+use App\Http\Controllers\Settings\MonthlyGoalController; // Adicionei este import se necessário
 
 Route::get('/', function () { return redirect()->route('login'); });
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
@@ -38,13 +39,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/audit', [AuditController::class, 'index'])->name('audit');
     });
 
+    // GRUPO DE RELATÓRIOS
     Route::middleware('role:admin,financeiro')->prefix('reports')->name('reports.')->group(function () {
+        
+        Route::get('/team-ranking', [ReportController::class, 'teamRanking'])->name('team-ranking');
+        
         Route::get('/commissions', [ReportController::class, 'commissions'])->name('commissions');
         Route::get('/performance', [ReportController::class, 'performance'])->name('performance');
         Route::get('/profitability', [ReportController::class, 'profitability'])->name('profitability');
         Route::get('/clients', [ReportController::class, 'clients'])->name('clients');
         
-        // RELATÓRIOS OPERACIONAIS
+        // Operacionais
         Route::get('/operational-equipment', [ReportController::class, 'operationalEquipment'])->name('operationalEquipment');
         Route::get('/operational-productivity', [ReportController::class, 'operationalProductivity'])->name('operationalProductivity');
         Route::get('/operational-status', [ReportController::class, 'operationalStatus'])->name('operationalStatus');
@@ -52,6 +57,11 @@ Route::middleware('auth')->group(function () {
     
     Route::middleware('role:admin')->prefix('settings')->name('settings.')->group(function () {
         Route::get('/', function() { return view('settings.index'); })->name('index'); 
+        
+        // --- NOVA ROTA DE METAS DA EMPRESA ---
+        Route::resource('monthly-goals', \App\Http\Controllers\Settings\MonthlyGoalController::class);
+        // -------------------------------------
+
         Route::resource('equipment', EquipmentController::class);
         Route::resource('courses', CourseController::class);
         Route::resource('taxes', TaxController::class);
@@ -83,7 +93,7 @@ Route::middleware('auth')->group(function () {
         
         // PDFs
         Route::get('/work-orders/checklist/{checklist}/pdf', [WorkOrderController::class, 'generateChecklistPdf'])->name('work-orders.checklistPdf');
-        Route::get('/work-orders/{workOrder}/pdf', [WorkOrderController::class, 'generatePdf'])->name('work-orders.pdf'); // Rota Nova
+        Route::get('/work-orders/{workOrder}/pdf', [WorkOrderController::class, 'generatePdf'])->name('work-orders.pdf');
 
         Route::patch('/work-orders/{workOrder}/status', [WorkOrderController::class, 'updateStatus'])->name('work-orders.updateStatus');
         Route::post('/work-orders/{workOrder}/checklist', [WorkOrderController::class, 'addChecklist'])->name('work-orders.addChecklist');

@@ -127,33 +127,59 @@
         <h1>4. Investimento</h1>
         
         @if($proposal->service_type == 'timelapse')
+            @php
+                // --- LÓGICA DE DISTRIBUIÇÃO DE PREÇO (TIMELAPSE) ---
+                // Objetivo: Fazer com que a soma visual (Mensalidade x Meses + Instalação) bata com o Total Global,
+                // mesmo que existam custos variáveis ocultos ou margens aplicadas sobre o todo.
+
+                $baseMonthly = $proposal->service_details['monthly_cost'] ?? 0;
+                $baseInstall = $proposal->service_details['installation_cost'] ?? 0;
+                $months = $proposal->service_details['months'] ?? 1;
+                
+                // Calcula o montante "Base" apenas dos itens visíveis na tabela do cliente
+                $visibleBase = ($baseMonthly * $months) + $baseInstall;
+
+                // Fator de Distribuição: Quanto o valor total representa sobre a base visível?
+                // Isso "embutirá" os custos variáveis e a margem proporcionalmente nos itens visíveis.
+                $factor = ($visibleBase > 0) ? ($proposal->total_value / $visibleBase) : 0;
+
+                // Aplica o fator para gerar os preços finais de apresentação
+                $finalMonthly = $baseMonthly * $factor;
+                $finalInstall = $baseInstall * $factor;
+            @endphp
+
             <table>
                 <thead>
                     <tr>
                         <th width="40%">DESCRIÇÃO</th>
-                        <th>Valor Unit.</th>
-                        <th>Qtd/Período</th>
                         <th>Valor Mensal</th>
+                        <th>Período</th>
+                        <th>Subtotal</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td class="text-left">
                             <strong>TIMELAPSE COM PAINEL SOLAR</strong><br>
-                            <small>Locação e Serviço Mensal</small>
+                            <small>Locação e Serviço Mensal (Tudo incluso)</small>
                         </td>
-                        <td>R$ {{ number_format($proposal->service_details['monthly_cost'], 2, ',', '.') }}</td>
-                        <td>{{ $proposal->service_details['months'] }} Meses</td>
-                        <td><strong>R$ {{ number_format($proposal->service_details['monthly_cost'], 2, ',', '.') }} / mês</strong></td>
+                        <td>R$ {{ number_format($finalMonthly, 2, ',', '.') }}</td>
+                        <td>{{ $months }} Meses</td>
+                        <td>R$ {{ number_format($finalMonthly * $months, 2, ',', '.') }}</td>
                     </tr>
-                    @if(!empty($proposal->service_details['installation_cost']))
+                    
+                    @if($baseInstall > 0)
                     <tr>
-                        <td class="text-left">INSTALAÇÃO DA CÂMERA (Setup)</td>
-                        <td>R$ {{ number_format($proposal->service_details['installation_cost'], 2, ',', '.') }}</td>
+                        <td class="text-left">
+                            <strong>INSTALAÇÃO DA CÂMERA (Setup)</strong><br>
+                            <small>Taxa única de configuração</small>
+                        </td>
+                        <td>R$ {{ number_format($finalInstall, 2, ',', '.') }}</td>
                         <td>1</td>
-                        <td>R$ {{ number_format($proposal->service_details['installation_cost'], 2, ',', '.') }}</td>
+                        <td>R$ {{ number_format($finalInstall, 2, ',', '.') }}</td>
                     </tr>
                     @endif
+
                     @if($proposal->courtesy)
                     <tr>
                         <td class="text-left"><strong>CORTESIA / BÔNUS</strong></td>
@@ -161,12 +187,18 @@
                         <td><strong>R$ 0,00</strong></td>
                     </tr>
                     @endif
+                    
                     <tr class="total-row">
                         <td class="text-left" colspan="3">VALOR GLOBAL DO CONTRATO (Período Total)</td>
                         <td>R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
                     </tr>
                 </tbody>
             </table>
+            
+            <p style="font-size: 9pt; color: #666; margin-top: -10px;">
+                * O valor mensal acima já contempla todos os impostos, custos logísticos e suporte técnico.
+            </p>
+
         @else
             <table>
                 <thead>

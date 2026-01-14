@@ -108,6 +108,7 @@
                             </div>
                         </div>
                     </div>
+                    
                     <div class="mb-8">
                         <h3 class="text-lg font-bold text-gray-800 mb-4 border-l-4 border-green-500 pl-3">Detalhamento Financeiro (Visão Interna)</h3>
                         @php $labels = ['fuel' => 'Combustível', 'hotel' => 'Hospedagem', 'food' => 'Alimentação', 'other' => 'Outros']; @endphp
@@ -115,24 +116,65 @@
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Detalhes</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Custo (Interno)</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor Cobrado</th></tr></thead>
                                 <tbody class="divide-y divide-gray-200">
+                                    
+                                    @php
+                                        // --- CÁLCULO DE MARKUP GLOBAL (INTERNO) ---
+                                        // Calcula um fator único que aplica a margem em TODOS os itens (Serviço, Instalação, Variáveis)
+                                        // para que a coluna "Valor Cobrado" some exatamente o Total da Proposta.
+                                        $baseMonthly = $proposal->service_details['monthly_cost'] ?? 0;
+                                        $baseInstall = $proposal->service_details['installation_cost'] ?? 0;
+                                        $months = $proposal->service_details['months'] ?? 1;
+                                        $totalVars = $proposal->variableCosts->sum('cost');
+                                        
+                                        $totalBase = ($baseMonthly * $months) + $baseInstall + $totalVars;
+                                        
+                                        // Evita divisão por zero
+                                        $globalFactor = ($totalBase > 0) ? ($proposal->total_value / $totalBase) : 1;
+                                    @endphp
+
                                     @if($proposal->service_type != 'timelapse')
                                     <tr><td class="px-6 py-4 text-sm font-medium text-gray-500">Custos Indiretos</td><td class="px-6 py-4 text-sm text-gray-500">Rateio Custo Fixo ({{ $proposal->service_details['period_hours'] ?? 0 }}h)</td><td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($costFixedProporcional, 2, ',', '.') }}</td><td class="px-6 py-4 text-sm text-gray-300 text-right">--</td></tr>
                                     <tr><td class="px-6 py-4 text-sm font-medium text-gray-500"></td><td class="px-6 py-4 text-sm text-gray-500">Amortização Cursos ({{ $proposal->service_details['period_hours'] ?? 0 }}h)</td><td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($costCourseProporcional, 2, ',', '.') }}</td><td class="px-6 py-4 text-sm text-gray-300 text-right">--</td></tr>
                                     @php $equipId = $proposal->service_details['equipment_id'] ?? null; $equipName = $equipId ? \App\Models\Settings\Equipment::find($equipId)->name ?? 'Não encontrado' : 'Não selecionado'; @endphp
                                     <tr><td class="px-6 py-4 text-sm font-medium text-gray-900">Equipamento</td><td class="px-6 py-4 text-sm text-gray-500">{{ $equipName }} (Depreciação)</td><td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($costEquipProporcional, 2, ',', '.') }}</td><td class="px-6 py-4 text-sm text-gray-300 text-right">--</td></tr>
                                     @endif
+
                                     @if($proposal->service_type == 'timelapse')
-                                        <tr><td class="px-6 py-4 text-sm font-medium text-gray-900">Serviço Timelapse</td><td class="px-6 py-4 text-sm text-gray-500">{{ $proposal->service_details['months'] ?? 1 }} Meses</td><td class="px-6 py-4 text-sm text-gray-300 text-right">--</td><td class="px-6 py-4 text-sm font-bold text-gray-800 text-right">R$ {{ number_format(($proposal->service_details['monthly_cost'] ?? 0) * ($proposal->service_details['months'] ?? 1), 2, ',', '.') }}</td></tr>
+                                        <tr>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900">Serviço Timelapse</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500">{{ $months }} Meses</td>
+                                            <td class="px-6 py-4 text-sm text-red-400 text-right">R$ {{ number_format($baseMonthly * $months, 2, ',', '.') }}</td>
+                                            <td class="px-6 py-4 text-sm font-bold text-gray-800 text-right">R$ {{ number_format(($baseMonthly * $months) * $globalFactor, 2, ',', '.') }}</td>
+                                        </tr>
+                                        @if($baseInstall > 0)
+                                        <tr>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900">Instalação</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500">Taxa Única</td>
+                                            <td class="px-6 py-4 text-sm text-red-400 text-right">R$ {{ number_format($baseInstall, 2, ',', '.') }}</td>
+                                            <td class="px-6 py-4 text-sm font-bold text-gray-800 text-right">R$ {{ number_format($baseInstall * $globalFactor, 2, ',', '.') }}</td>
+                                        </tr>
+                                        @endif
                                     @else
                                         <tr><td class="px-6 py-4 text-sm font-medium text-gray-900">Mão de Obra</td><td class="px-6 py-4 text-sm text-gray-500">Piloto / Operador</td><td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($proposal->service_details['labor_cost'] ?? 0, 2, ',', '.') }}</td><td class="px-6 py-4 text-sm text-gray-800 text-right"> (Incluso) </td></tr>
                                     @endif
+
                                     @foreach($proposal->variableCosts as $cost)
-                                    <tr><td class="px-6 py-4 text-sm font-medium text-gray-500">Logística</td><td class="px-6 py-4 text-sm text-gray-500">{{ $labels[$cost->description] ?? $cost->description }}</td><td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($cost->cost, 2, ',', '.') }}</td><td class="px-6 py-4 text-sm text-gray-800 text-right">R$ {{ number_format($cost->cost, 2, ',', '.') }}</td></tr>
+                                    <tr>
+                                        <td class="px-6 py-4 text-sm font-medium text-gray-500">Logística</td>
+                                        <td class="px-6 py-4 text-sm text-gray-500">{{ $labels[$cost->description] ?? $cost->description }}</td>
+                                        <td class="px-6 py-4 text-sm text-red-400 text-right">- R$ {{ number_format($cost->cost, 2, ',', '.') }}</td>
+                                        <td class="px-6 py-4 text-sm text-gray-800 text-right">R$ {{ number_format($cost->cost * $globalFactor, 2, ',', '.') }}</td>
+                                    </tr>
                                     @endforeach
+
                                     @if($proposal->courtesy)
                                     <tr class="bg-blue-50"><td class="px-6 py-4 text-sm font-bold text-blue-800">CORTESIA</td><td class="px-6 py-4 text-sm text-blue-800" colspan="3">{{ $proposal->courtesy }}</td></tr>
                                     @endif
-                                    <tr class="bg-gray-100 border-t-2 border-gray-300"><td class="px-6 py-4 text-base font-bold text-gray-900" colspan="3">VALOR FINAL DE VENDA</td><td class="px-6 py-4 text-xl font-bold text-indigo-700 text-right">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td></tr>
+                                    
+                                    <tr class="bg-gray-100 border-t-2 border-gray-300">
+                                        <td class="px-6 py-4 text-base font-bold text-gray-900" colspan="3">VALOR FINAL DE VENDA</td>
+                                        <td class="px-6 py-4 text-xl font-bold text-indigo-700 text-right">R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>

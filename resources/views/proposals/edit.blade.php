@@ -123,7 +123,15 @@
                                 <div><span class="block text-gray-400">Valor Comissão</span><span class="font-bold text-lg" x-text="formatMoney(results.commission_value)"></span></div>
                             </div>
                             <div class="flex justify-between items-center border-t border-gray-600 pt-4">
-                                <div class="text-2xl font-bold">Total: <span class="text-green-400" x-text="formatMoney(results.final_price)"></span></div>
+                                <div class="flex-grow flex items-center">
+                                    <div class="text-2xl font-bold mr-6">Total: <span class="text-green-400" x-text="formatMoney(results.final_price)"></span></div>
+                                    
+                                    <div x-show="serviceType === 'timelapse'" class="border-l border-gray-600 pl-6">
+                                        <span class="block text-gray-400 text-xs uppercase">Mensalidade (Cliente)</span>
+                                        <span class="font-bold text-xl text-yellow-400" x-text="formatMoney(results.estimated_monthly)"></span>
+                                    </div>
+                                </div>
+
                                 <div class="flex space-x-3">
                                     <a href="{{ route('proposals.index') }}" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-white font-bold flex items-center">Cancelar</a>
                                     <button type="button" @click="calculate()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 rounded text-white font-bold">Recalcular</button>
@@ -182,7 +190,7 @@
                         other: vars['other'] ? formatBRL(vars['other']) : ''
                     }
                 },
-                results: { total_cost: 0, taxes_percent: 0, commission_percent: 0, commission_value: 0, final_price: {{ $proposal->total_value ?? 0 }} },
+                results: { total_cost: 0, taxes_percent: 0, commission_percent: 0, commission_value: 0, final_price: {{ $proposal->total_value ?? 0 }}, estimated_monthly: 0 },
                 maskMoney(e, modelPath) { 
                     let value = e.target.value.replace(/\D/g, "");
                     value = (value / 100).toFixed(2) + "";

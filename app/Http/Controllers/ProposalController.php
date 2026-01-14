@@ -260,7 +260,7 @@ class ProposalController extends Controller
         $channelId = $request->input('channel_id');
         $profitMargin = $this->parseMoney($request->input('profit_margin', 0));
 
-        // 1. Soma dos Custos Variáveis (Logística, etc)
+        // 1. Soma dos Custos Variáveis
         $totalVariable = 0;
         foreach ($vars as $cost) { $totalVariable += $this->parseMoney($cost); }
 
@@ -283,51 +283,50 @@ class ProposalController extends Controller
         }
         $totalHourlyCostBase = $fixedCostPerHour + $equipDepreciationHour + $courseDepreciationHour;
 
-        // 3. Cálculo do Custo do Serviço (BASE)
+        // 3. Cálculo do Custo Base
         $serviceCostBase = 0;
         
         if ($serviceType === 'drone' || $serviceType === 'tour_virtual') {
-            // DRONE: Usa a lógica de hora técnica + custos fixos da empresa
             $hours = floatval($details['period_hours'] ?? 1);
             $laborCost = $this->parseMoney($details['labor_cost'] ?? 0);
             $serviceCostBase = $laborCost + ($totalHourlyCostBase * $hours);
             
         } elseif ($serviceType === 'timelapse') {
-            // TIMELAPSE: Soma Pura dos Inputs (Base Mensal + Instalação)
-            // OBS: Não adicionamos custo fixo por hora aqui para não explodir o valor
             $months = floatval($details['months'] ?? 1);
-            $monthlyBase = $this->parseMoney($details['monthly_cost'] ?? 0); // Agora tratado como BASE
+            $monthlyBase = $this->parseMoney($details['monthly_cost'] ?? 0);
             $installBase = $this->parseMoney($details['installation_cost'] ?? 0);
             $serviceCostBase = ($monthlyBase * $months) + $installBase;
         }
 
-        // 4. Custo Total (Serviço Base + Variáveis Logística)
+        // 4. Custo Total (Base + Variáveis)
         $totalCost = $serviceCostBase + $totalVariable;
         
         // 5. Definição de Taxas
         $taxes = Tax::where('is_default', true)->sum('percentage');
-        
-        // Estimativa para pegar a faixa de comissão correta
         $estimatedPrice = $totalCost * 1.5; 
         $commissionPercent = $this->getCommissionPercentageBasedOnHistory(Auth::id(), $channelId, $estimatedPrice);
 
-        // 6. CÁLCULO DE PREÇO DE VENDA (MARKUP)
-        // Fórmula: Preço = Custo / (1 - (Impostos + Comissão + Margem))
+        // 6. CÁLCULO DE PREÇO FINAL (MARKUP)
         $divisor = 1 - (($taxes + $commissionPercent + $profitMargin) / 100);
-        
-        // Proteção contra divisão por zero ou negativa (margem > 100%)
         $finalPrice = ($divisor <= 0) ? $totalCost * 2 : $totalCost / $divisor;
         $commissionValue = $finalPrice * ($commissionPercent / 100);
 
-        // --- CÁLCULO DA MENSALIDADE FINAL ESTIMADA (Para exibir na tela) ---
+        // --- CORREÇÃO: MENSALIDADE FINAL IDÊNTICA AO PDF ---
         $estimatedMonthly = 0;
         if ($serviceType === 'timelapse') {
-            // Descobre o "Fator de Markup" aplicado (Ex: 1.8x)
-            // Se Custo Total for 0, evita divisão por zero
-            $factor = ($totalCost > 0) ? ($finalPrice / $totalCost) : 1;
-            
-            // Aplica esse fator na mensalidade base que o usuário digitou
+            $months = floatval($details['months'] ?? 1);
             $baseMonthlyInput = $this->parseMoney($details['monthly_cost'] ?? 0);
+            $baseInstallInput = $this->parseMoney($details['installation_cost'] ?? 0);
+
+            // A Lógica do PDF: O Preço Final é distribuído apenas entre Mensalidade e Instalação.
+            // Os custos variáveis (combustível, etc) são "absorvidos" por esses dois itens visíveis.
+            
+            $visibleBase = ($baseMonthlyInput * $months) + $baseInstallInput;
+
+            // Fator de Distribuição (Final Price / Base Visível)
+            // Isso garante que se o Total é 17k, a soma das parcelas + instalação dará 17k exatos.
+            $factor = ($visibleBase > 0) ? ($finalPrice / $visibleBase) : 1;
+            
             $estimatedMonthly = $baseMonthlyInput * $factor;
         }
 
@@ -337,7 +336,7 @@ class ProposalController extends Controller
             'commission_percent' => $commissionPercent,
             'commission_value' => round($commissionValue, 2),
             'final_price' => round($finalPrice, 2),
-            'estimated_monthly' => round($estimatedMonthly, 2) // <--- CAMPO NOVO
+            'estimated_monthly' => round($estimatedMonthly, 2)
         ]);
     }
 

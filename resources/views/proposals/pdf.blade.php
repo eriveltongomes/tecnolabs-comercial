@@ -161,7 +161,7 @@
                     <tr>
                         <td class="text-left">
                             <strong>TIMELAPSE COM PAINEL SOLAR</strong><br>
-                            <small>Locação e Serviço Mensal (Tudo incluso)</small>
+                            <small>Serviço Mensal</small>
                         </td>
                         <td>R$ {{ number_format($finalMonthly, 2, ',', '.') }}</td>
                         <td>{{ $months }} Meses</td>
@@ -172,7 +172,7 @@
                     <tr>
                         <td class="text-left">
                             <strong>INSTALAÇÃO DA CÂMERA (Setup)</strong><br>
-                            <small>Taxa única de configuração</small>
+                            <small>Pagamento Único</small>
                         </td>
                         <td>R$ {{ number_format($finalInstall, 2, ',', '.') }}</td>
                         <td>1</td>

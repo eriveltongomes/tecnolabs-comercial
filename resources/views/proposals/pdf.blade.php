@@ -133,18 +133,18 @@
                         <th width="40%">DESCRIÇÃO</th>
                         <th>Valor Unit.</th>
                         <th>Qtd/Período</th>
-                        <th>Total</th>
+                        <th>Valor Mensal</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td class="text-left">
                             <strong>TIMELAPSE COM PAINEL SOLAR</strong><br>
-                            <small>Pagamento mensal</small>
+                            <small>Locação e Serviço Mensal</small>
                         </td>
                         <td>R$ {{ number_format($proposal->service_details['monthly_cost'], 2, ',', '.') }}</td>
                         <td>{{ $proposal->service_details['months'] }} Meses</td>
-                        <td>R$ {{ number_format($proposal->service_details['monthly_cost'] * $proposal->service_details['months'], 2, ',', '.') }}</td>
+                        <td><strong>R$ {{ number_format($proposal->service_details['monthly_cost'], 2, ',', '.') }} / mês</strong></td>
                     </tr>
                     @if(!empty($proposal->service_details['installation_cost']))
                     <tr>
@@ -162,7 +162,7 @@
                     </tr>
                     @endif
                     <tr class="total-row">
-                        <td class="text-left" colspan="3">TOTAL GERAL</td>
+                        <td class="text-left" colspan="3">VALOR GLOBAL DO CONTRATO (Período Total)</td>
                         <td>R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
                     </tr>
                 </tbody>
@@ -179,7 +179,14 @@
                 <tbody>
                     <tr>
                         <td class="text-left">
-                            <strong>CAPTAÇÃO DE IMAGENS ({{ ucfirst($proposal->service_type) }})</strong>
+                            <strong>
+                                CAPTAÇÃO DE IMAGENS 
+                                @if($proposal->service_type == 'tour_virtual')
+                                    (Tour Virtual 360°)
+                                @else
+                                    ({{ ucfirst($proposal->service_type) }})
+                                @endif
+                            </strong>
                         </td>
                         <td>R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
                         <td>R$ {{ number_format($proposal->total_value, 2, ',', '.') }}</td>
